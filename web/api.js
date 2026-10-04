@@ -103,9 +103,23 @@
       const e = { id: cat + '-' + String(max + 1).padStart(3, '0'), categoria: cat, nombre: nombre.trim(), video: (video || '').trim() };
       db.catalogo.push(e); save(db); return e;
     },
-    updateExercise({ key, id, cambios }) {
-      admin(key); const db = load(), e = db.catalogo.find(x => x.id === id);
-      if (!e) throw new Error('No encontrado'); Object.assign(e, cambios); save(db); return true;
+    updateExercise({ key, id, nombre, video }) {
+      admin(key); if (!String(nombre || '').trim()) throw new Error('Falta el nombre del ejercicio');
+      const db = load(), e = db.catalogo.find(x => x.id === id);
+      if (!e) throw new Error('No encontrado');
+      e.nombre = nombre.trim(); e.video = String(video || '').trim(); save(db); return true;
+    },
+    removeExercise({ key, id }) {
+      admin(key); const db = load();
+      if (db.asignaciones.some(a => a.ejercicioId === id)) throw new Error('Está asignado a algún usuario. Quítalo de sus planes antes de eliminarlo.');
+      db.catalogo = db.catalogo.filter(e => e.id !== id); save(db); return true;
+    },
+    updateAssignment({ key, id, cantidad, unidad, series, variante }) {
+      admin(key); const db = load(), a = db.asignaciones.find(x => x.id === id);
+      if (!a) throw new Error('No encontrado');
+      if (!UNIDADES.includes(unidad)) throw new Error('Unidad no válida');
+      if (!(+cantidad > 0) || !(+series >= 1 && +series <= 20)) throw new Error('Cantidad o series no válidas');
+      Object.assign(a, { cantidad: +cantidad, unidad, series: +series, variante }); save(db); return true;
     },
     renameCategory({ key, id, nombre }) {
       admin(key); const db = load(); db.categorias.find(c => c.id === +id).nombre = nombre; save(db); return true;
@@ -113,7 +127,7 @@
     addAssignment({ key, codigo, ejercicioId, cantidad, unidad, series, variante }) {
       admin(key); const db = load();
       if (!(+cantidad > 0) || !(+series >= 1)) throw new Error('Cantidad o series no válidas');
-      const a = { id: 'A' + Date.now().toString(36).toUpperCase(), codigo: norm(codigo), ejercicioId, cantidad: +cantidad, unidad, series: +series, variante, orden: db.asignaciones.length + 1 };
+      const a = { id: 'A' + Date.now().toString(36).toUpperCase() + code(3), codigo: norm(codigo), ejercicioId, cantidad: +cantidad, unidad, series: +series, variante, orden: db.asignaciones.length + 1 };
       db.asignaciones.push(a); save(db); return { id: a.id };
     },
     removeAssignment({ key, id }) {

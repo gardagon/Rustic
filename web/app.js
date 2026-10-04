@@ -241,7 +241,7 @@
           const list = db.catalogo.filter(e => e.categoria === c.id);
           return `<div class="cat-group-title row"><span class="grow">${c.id} · ${esc(c.nombre)}</span>
               <button class="btn-link btn-small" data-rename="${c.id}">Renombrar</button></div>
-            ${list.map(e => `<div class="list-item"><span class="mono">${esc(e.id)}</span><span class="grow">${esc(e.nombre)}</span>${e.video ? '<span class="chip">vídeo</span>' : ''}</div>`).join('')
+            ${list.map(e => `<button class="list-item" data-ej="${esc(e.id)}"><span class="mono">${esc(e.id)}</span><span class="grow">${esc(e.nombre)}</span>${e.video ? '<span class="chip">vídeo</span>' : ''}<span class="edit-hint">Editar</span></button>`).join('')
               || '<div class="list-item muted small">Sin ejercicios</div>'}`;
         }).join('')}</div>`);
       wireShell();
@@ -253,6 +253,7 @@
           await loadAdmin(true); toast(`Añadido ${e.id} · ${e.nombre}`); renderAdmin('ejercicios');
         } catch (e) { toast(e.message); }
       };
+      $app.querySelectorAll('[data-ej]').forEach(b => (b.onclick = () => go('#/admin/ej/' + encodeURIComponent(b.dataset.ej))));
       $app.querySelectorAll('[data-rename]').forEach(b => (b.onclick = async () => {
         const c = db.categorias.find(x => x.id === +b.dataset.rename);
         const nombre = prompt('Nuevo nombre para la categoría ' + c.id, c.nombre);
@@ -295,10 +296,10 @@
       <div class="section-title"><h2>Plan actual</h2><span class="muted small">${asig.length}</span></div>
       <div class="list">${asig.map(a => {
         const e = exById[a.ejercicioId];
-        return `<div class="list-item">
+        return `<button class="list-item" data-edit-a="${esc(a.id)}">
           <span class="grow"><strong>${esc(e ? e.nombre : a.ejercicioId)}</strong><br>
             <span class="muted small">Cat. ${e ? e.categoria : '?'} · ${esc(dose(a))}${a.variante ? ' · ' + esc(a.variante) : ''}</span></span>
-          <button class="btn-danger btn-small" data-del="${esc(a.id)}" aria-label="Quitar">Quitar</button></div>`;
+          <span class="edit-hint">Editar</span></button>`;
       }).join('') || '<div class="empty">Sin ejercicios asignados.</div>'}</div>`;
 
     document.getElementById('back').onclick = () => go('#/admin');
@@ -318,11 +319,92 @@
         } catch (e) { toast(e.message); }
       };
     }
-    $app.querySelectorAll('[data-del]').forEach(b => (b.onclick = async () => {
+    $app.querySelectorAll('[data-edit-a]').forEach(b => (b.onclick = () => go('#/admin/a/' + encodeURIComponent(b.dataset.editA))));
+  }
+
+  /* ---------- editar un ejercicio del catálogo ---------- */
+  async function showEditExercise(id) {
+    if (!adminKey()) return renderAdminLogin();
+    loading();
+    try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
+    const db = adminDb, e = db.catalogo.find(x => x.id === id);
+    if (!e) return go('#/admin/ejercicios');
+    const cat = db.categorias.find(c => c.id === e.categoria);
+    const usos = db.asignaciones.filter(a => a.ejercicioId === id).length;
+
+    $app.innerHTML = `
+      <header class="top">
+        <div><h1>Editar ejercicio</h1><p class="muted"><span class="mono">${esc(e.id)}</span> · ${esc(cat ? cat.nombre : '')}</p></div>
+        <button class="btn-link" id="back">Volver</button>
+      </header>
+      <form id="f" class="card stack">
+        <div><label for="n">Nombre</label><input id="n" required value="${esc(e.nombre)}"></div>
+        <div><label for="v">Enlace de YouTube (vídeo "oculto")</label><input id="v" type="url" inputmode="url" value="${esc(e.video)}" placeholder="https://youtu.be/…"></div>
+        <p class="muted small">Asignado en ${usos} plan${usos === 1 ? '' : 'es'}. Los cambios se ven en todos.</p>
+        <button class="btn-block">Guardar</button>
+      </form>
+      <div class="spacer"></div>
+      <button class="btn-danger btn-block" id="del">Eliminar del catálogo</button>
+      <p class="muted small" style="margin-top:8px">La categoría no se puede cambiar porque forma parte del ID. Para moverlo, crea uno nuevo en la otra categoría.</p>`;
+
+    document.getElementById('back').onclick = () => go('#/admin/ejercicios');
+    document.getElementById('f').onsubmit = async ev => {
+      ev.preventDefault();
+      try {
+        await api.call('updateExercise', { key: adminKey(), id, nombre: document.getElementById('n').value, video: document.getElementById('v').value });
+        await loadAdmin(true); toast('Guardado'); go('#/admin/ejercicios');
+      } catch (err) { toast(err.message); }
+    };
+    document.getElementById('del').onclick = async () => {
+      if (!confirm(`¿Eliminar "${e.nombre}" del catálogo?`)) return;
+      try { await api.call('removeExercise', { key: adminKey(), id }); await loadAdmin(true); toast('Eliminado'); go('#/admin/ejercicios'); }
+      catch (err) { toast(err.message); }
+    };
+  }
+
+  /* ---------- editar una asignación de un usuario ---------- */
+  async function showEditAssignment(id) {
+    if (!adminKey()) return renderAdminLogin();
+    loading();
+    try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
+    const db = adminDb, a = db.asignaciones.find(x => x.id === id);
+    if (!a) return go('#/admin');
+    const e = db.catalogo.find(x => x.id === a.ejercicioId);
+    const u = db.usuarios.find(x => x.codigo === a.codigo);
+    const backTo = '#/admin/u/' + encodeURIComponent(a.codigo);
+    const opt = (list, sel) => list.map(x => `<option ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+
+    $app.innerHTML = `
+      <header class="top">
+        <div><h1>${esc(e ? e.nombre : a.ejercicioId)}</h1><p class="muted">Plan de ${esc(u ? u.nombre : a.codigo)}</p></div>
+        <button class="btn-link" id="back">Volver</button>
+      </header>
+      <form id="f" class="card stack">
+        <div class="grid-3">
+          <div><label for="q">Cantidad</label><input id="q" type="number" inputmode="numeric" min="1" value="${a.cantidad}" required></div>
+          <div><label for="un">Unidad</label><select id="un">${opt(db.unidades, a.unidad)}</select></div>
+          <div><label for="s">Series</label><input id="s" type="number" inputmode="numeric" min="1" max="20" value="${a.series}" required></div>
+        </div>
+        <div><label for="va">Variante</label><select id="va">${opt(db.variantes, a.variante)}</select></div>
+        <button class="btn-block">Guardar</button>
+      </form>
+      <div class="spacer"></div>
+      <button class="btn-danger btn-block" id="del">Quitar del plan</button>`;
+
+    document.getElementById('back').onclick = () => go(backTo);
+    document.getElementById('f').onsubmit = async ev => {
+      ev.preventDefault();
+      try {
+        await api.call('updateAssignment', { key: adminKey(), id, cantidad: +document.getElementById('q').value,
+          unidad: document.getElementById('un').value, series: +document.getElementById('s').value, variante: document.getElementById('va').value });
+        await loadAdmin(true); toast('Guardado'); go(backTo);
+      } catch (err) { toast(err.message); }
+    };
+    document.getElementById('del').onclick = async () => {
       if (!confirm('¿Quitar este ejercicio del plan?')) return;
-      try { await api.call('removeAssignment', { key: adminKey(), id: b.dataset.del }); await loadAdmin(true); showAdminUser(codigo); }
-      catch (e) { toast(e.message); }
-    }));
+      try { await api.call('removeAssignment', { key: adminKey(), id }); await loadAdmin(true); toast('Quitado'); go(backTo); }
+      catch (err) { toast(err.message); }
+    };
   }
 
   /* ================= RUTAS ================= */
@@ -333,6 +415,8 @@
     if (h === '#/admin') return showAdmin('usuarios');
     if (h === '#/admin/ejercicios') return showAdmin('ejercicios');
     if (h.startsWith('#/admin/u/')) return showAdminUser(decodeURIComponent(h.slice(10)));
+    if (h.startsWith('#/admin/ej/')) return showEditExercise(decodeURIComponent(h.slice(11)));
+    if (h.startsWith('#/admin/a/')) return showEditAssignment(decodeURIComponent(h.slice(10)));
     if (store.get('codigo')) return go('#/plan');
     renderLogin();
   }

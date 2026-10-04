@@ -101,9 +101,11 @@ var ACTIONS = {
   adminData: function (r) { requireAdmin_(r.key); return adminData_(); },
   addUser: function (r) { requireAdmin_(r.key); return withLock_(function () { return addUser_(r.nombre); }); },
   addExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return addExercise_(r.categoria, r.nombre, r.video); }); },
-  updateExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Catalogo', 'id', r.id, r.cambios); }); },
+  updateExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateExercise_(r.id, r.nombre, r.video); }); },
+  removeExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return removeExercise_(r.id); }); },
   renameCategory: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Categorias', 'id', r.id, { nombre: r.nombre }); }); },
   addAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return addAssignment_(r); }); },
+  updateAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateAssignment_(r); }); },
   removeAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Asignaciones', 'id', r.id, { activo: false }); }); }
 };
 
@@ -246,9 +248,29 @@ function addAssignment_(r) {
   var cantidad = Number(r.cantidad), series = Number(r.series);
   if (!(cantidad > 0) || !(series >= 1 && series <= 20)) throw new Error('Cantidad o series no válidas');
   var orden = readTable_('Asignaciones').filter(function (a) { return normCode_(a.codigo) === codigo; }).length + 1;
-  var id = 'A' + Date.now().toString(36).toUpperCase();
+  var id = 'A' + Date.now().toString(36).toUpperCase() + randomCode_(3);
   sheet_('Asignaciones').appendRow([id, codigo, r.ejercicioId, cantidad, r.unidad, series, r.variante || '', orden, true]);
   return { id: id };
+}
+
+function updateExercise_(id, nombre, video) {
+  nombre = String(nombre || '').trim();
+  if (!nombre) throw new Error('Falta el nombre del ejercicio');
+  // La categoría no se cambia: el ID empieza por ella. Para moverlo, se crea uno nuevo.
+  return updateRow_('Catalogo', 'id', id, { nombre: nombre, video: String(video || '').trim() });
+}
+
+function removeExercise_(id) {
+  var enUso = readTable_('Asignaciones').some(function (a) { return a.ejercicioId === id && isActive_(a.activo); });
+  if (enUso) throw new Error('Está asignado a algún usuario. Quítalo de sus planes antes de eliminarlo.');
+  return updateRow_('Catalogo', 'id', id, { activo: false });
+}
+
+function updateAssignment_(r) {
+  if (UNIDADES.indexOf(r.unidad) < 0) throw new Error('Unidad no válida');
+  var cantidad = Number(r.cantidad), series = Number(r.series);
+  if (!(cantidad > 0) || !(series >= 1 && series <= 20)) throw new Error('Cantidad o series no válidas');
+  return updateRow_('Asignaciones', 'id', r.id, { cantidad: cantidad, unidad: r.unidad, series: series, variante: r.variante || '' });
 }
 
 /* ------------------------------------------------------------------ */

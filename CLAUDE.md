@@ -17,7 +17,8 @@ App de planes de ejercicios. Cada usuario entra con un código, ve sus ejercicio
 web/            PWA estática (HTML + CSS + JS, sin build). Se publica en GitHub Pages.
   config.js     API_URL del backend. Vacía = modo demo (datos en localStorage, clave admin "admin", código "DEMO").
   api.js        Capa de datos. Implementa las mismas acciones en remoto y en demo: si añades una acción, añádela en los dos sitios.
-  app.js        Interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO
+  app.js        Interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
+                #/admin/ej/ID (editar ejercicio) , #/admin/a/ID (editar asignación)
   sw.js         Service worker "red primero": los cambios se ven al recargar.
 apps-script/
   Code.gs       Backend en Google Apps Script vinculado a la Google Sheet (la base de datos).
@@ -40,6 +41,7 @@ Decisiones tomadas:
 - IDs de ejercicio `{categoria}-{nnn}` (ej. `3-007`), generados automáticamente. Sin depender de mayúsculas/minúsculas, porque Sheets no las distingue en búsquedas.
 - Códigos de usuario aleatorios de 6 caracteres sin 0/O/1/I.
 - Borrado lógico (`activo = FALSE`), nunca se borran filas salvo en Registro al desmarcar una serie.
+- Un ejercicio del catálogo no cambia de categoría (va en su ID) y no se puede eliminar mientras esté asignado.
 - Vídeos de YouTube como "ocultos" (no "privados": los privados no se reproducen para otros).
 
 ## Flujo de trabajo
@@ -49,10 +51,14 @@ Decisiones tomadas:
 - Sin dependencias ni paso de build. Mantenerlo así salvo que haya un motivo claro.
 - Probar en local: `cd web && python3 -m http.server 8000`.
 
+## Seguridad del repositorio
+
+- El repositorio es público: cualquiera puede leer el código, pero solo el dueño puede cambiarlo. Nunca aceptar pull requests de terceros sin revisarlos.
+- Nunca poner en el repositorio claves, la URL de la hoja ni datos de usuarios. La clave de administrador vive en las propiedades del script.
+
 ## Pendiente / ideas
 
 - Nombres reales de las 9 categorías (se editan desde Administración → Ejercicios → Renombrar).
 - Valores reales de "variante" (pestaña Variantes).
 - Vista de histórico por días (los datos ya se guardan en Registro).
-- Editar cantidad/series de una asignación sin quitarla y volverla a crear.
 - Reordenar ejercicios dentro de una categoría.
