@@ -35,7 +35,17 @@
 
   /* ---------- catálogo (admin) ---------- */
   const LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
-  const letraIdx = l => { const i = LETRAS.indexOf(l); return i < 0 ? 100 + l.charCodeAt(0) : i; };
+  const letraIdx = l => { const i = LETRAS.indexOf(l); return i < 0 ? 100 + (l || '~').charCodeAt(0) : i; };
+  // El orden no depende del servidor: se recalcula aquí con el alfabeto español.
+  // Si a una fila de la hoja le falta la letra o la variante, se deducen del ID (4Ñ1 → Ñ, 1).
+  const fixEj = e => {
+    const id = String(e.id || e.ejercicioId || '').normalize('NFC').toUpperCase();
+    const m = id.match(/^(\d+)(\D)(\d*)$/);
+    return { ...e, letra: String(e.letra || (m ? m[2] : '')).normalize('NFC').toUpperCase(),
+      variante: +e.variante || (m && m[3] ? +m[3] : 0), categoria: +e.categoria || (m ? +m[1] : 0) };
+  };
+  const sortEj = (a, b) => a.categoria - b.categoria || letraIdx(a.letra) - letraIdx(b.letra) || a.variante - b.variante;
+  const fixPlan = p => ({ ...p, ejercicios: p.ejercicios.map(fixEj).sort(sortEj) });
   const byId = id => adminDb.catalogo.find(e => e.id === id);
   const baseOf = e => (e.variante ? byId(e.categoria + e.letra) : e);
   const variantsOf = base => adminDb.catalogo.filter(e => e.categoria === base.categoria && e.letra === base.letra && e.variante);
@@ -72,7 +82,7 @@
       if (!codigo) return;
       f.querySelector('button').disabled = true;
       try {
-        plan = await api.call('getPlan', { codigo });
+        plan = fixPlan(await api.call('getPlan', { codigo }));
         store.set('codigo', codigo);
         go('#/plan');
       } catch (e) {
@@ -89,7 +99,7 @@
     if (!codigo) return go('#/');
     if (!plan) {
       loading();
-      try { plan = await api.call('getPlan', { codigo }); }
+      try { plan = fixPlan(await api.call('getPlan', { codigo })); }
       catch (e) { store.set('codigo', null); return renderLogin(e.message); }
     }
     renderPlan();
@@ -195,6 +205,7 @@
   async function loadAdmin(force) {
     if (adminDb && !force) return adminDb;
     adminDb = await api.call('adminData', { key: adminKey() });
+    adminDb.catalogo = adminDb.catalogo.map(fixEj).sort(sortEj);
     return adminDb;
   }
 

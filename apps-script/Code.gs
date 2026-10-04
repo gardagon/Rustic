@@ -130,13 +130,21 @@ var ACTIONS = {
 /*  CATÁLOGO                                                           */
 /* ------------------------------------------------------------------ */
 
+// Las partes del ID: 4Ñ1 → categoría 4, letra Ñ, variante 1.
+function parseId_(id) {
+  var m = normId_(id).match(/^(\d+)([^\d])(\d*)$/);
+  return m ? { categoria: Number(m[1]), letra: m[2], variante: m[3] ? Number(m[3]) : 0 } : null;
+}
+
 function readCatalog_() {
-  return readTable_('Catalogo').filter(function (e) { return isActive_(e.activo); }).map(function (e) {
+  return readTable_('Catalogo').filter(function (e) { return isActive_(e.activo) && normId_(e.id); }).map(function (e) {
+    // Si una fila se añadió a mano y le falta algún dato, se deduce del ID.
+    var p = parseId_(e.id) || {};
     return {
       id: normId_(e.id),
-      categoria: Number(e.categoria),
-      letra: String(e.letra).toUpperCase(),
-      variante: e.variante === '' ? 0 : Number(e.variante),
+      categoria: Number(e.categoria) || p.categoria,
+      letra: normId_(e.letra) || p.letra || '',
+      variante: e.variante === '' ? (p.variante || 0) : Number(e.variante),
       nombre: e.nombre || '',
       video: e.video || ''
     };
@@ -409,7 +417,7 @@ function withLock_(fn) {
 function isTrue_(v) { return v === true || String(v).toUpperCase() === 'TRUE'; }
 function isActive_(v) { return v === '' || v === true || String(v).toUpperCase() === 'TRUE'; }
 function normCode_(c) { return String(c || '').trim().toUpperCase(); }
-function normId_(c) { return String(c || '').trim().toUpperCase(); }
+function normId_(c) { return String(c || '').trim().normalize('NFC').toUpperCase(); }
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function fmtDate_(v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v); }
 
