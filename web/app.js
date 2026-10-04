@@ -1,4 +1,5 @@
-// Rustic — interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO , #/admin/ej/ID , #/admin/a/ID
+// Rustic — interfaz. Rutas por hash: #/ , #/plan , #/historial , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
+// #/admin/ej/ID , #/admin/a/ID , #/admin/np/CODIGO (nueva planificación) , #/admin/h/CODIGO (histórico)
 (function () {
   const api = window.RusticAPI;
   const $app = document.getElementById('app');
@@ -22,6 +23,11 @@
   const X2_HELP = 'x<sub>2</sub>: la repetición cuenta cuando la has hecho con los dos lados, o ida y vuelta.';
   const x2Field = (id, on) => `<label class="check"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}>
     <span>x<sub>2</sub> · cuenta con los dos lados / ida y vuelta</span></label>`;
+  const fechaMedia = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '');
+  const fechaDia = iso => {
+    const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
   const fechaLarga = iso => {
     const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -101,8 +107,15 @@
       loading();
       try { plan = fixPlan(await api.call('getPlan', { codigo })); }
       catch (e) { store.set('codigo', null); return renderLogin(e.message); }
+      return renderPlan();
     }
+    // Se pinta al instante lo que ya había y se refresca por detrás,
+    // por si el entrenador ha cambiado la planificación mientras tanto.
     renderPlan();
+    try {
+      const fresco = fixPlan(await api.call('getPlan', { codigo }));
+      if (location.hash === '#/plan' && JSON.stringify(fresco) !== JSON.stringify(plan)) { plan = fresco; renderPlan(); }
+    } catch {}
   }
 
   function renderPlan() {
@@ -130,6 +143,7 @@
         <div>
           <h1>Hola, ${esc(plan.nombre)}</h1>
           <p class="muted">${esc(fechaLarga(plan.fecha))}</p>
+          ${plan.plan ? `<p class="plan-name">${esc(plan.plan.nombre)} · desde ${esc(fechaMedia(plan.plan.inicio))}</p>` : ''}
         </div>
         <button class="btn-link" id="logout">Salir</button>
       </header>
@@ -137,8 +151,10 @@
         <div class="progress-bar"><div style="width:${pct}%"></div></div>
         <p class="progress-label">${done} de ${total} series hechas hoy</p></div>` : ''}
       ${cats || '<div class="card empty">Todavía no tienes ejercicios asignados.</div>'}
-      ${plan.ejercicios.some(e => e.x2) ? `<p class="legend">${X2_HELP}</p>` : ''}`;
+      ${plan.ejercicios.some(e => e.x2) ? `<p class="legend">${X2_HELP}</p>` : ''}
+      <button class="btn-ghost btn-block" id="hist" style="margin-top:20px">Ver mi histórico</button>`;
 
+    document.getElementById('hist').onclick = () => go('#/historial');
     document.getElementById('logout').onclick = () => { store.set('codigo', null); plan = null; openCats.clear(); go('#/'); };
     $app.querySelectorAll('details.cat').forEach(d => d.addEventListener('toggle', () => {
       d.open ? openCats.add(+d.dataset.cat) : openCats.delete(+d.dataset.cat);
@@ -309,6 +325,7 @@
     const db = adminDb;
     const u = db.usuarios.find(x => x.codigo === codigo);
     if (!u) return go('#/admin');
+    const vig = (db.planes || []).filter(p => p.codigo === codigo && !p.fin).sort((a, b) => (a.inicio < b.inicio ? 1 : -1))[0];
     const asig = db.asignaciones.filter(a => a.codigo === codigo)
       .map(a => ({ a, e: byId(a.ejercicioId) }))
       .sort((x, y) => (x.e && y.e ? x.e.categoria - y.e.categoria || letraIdx(x.e.letra) - letraIdx(y.e.letra) || x.e.variante - y.e.variante : 0));
@@ -318,7 +335,17 @@
         <div><h1>${esc(u.nombre)}</h1><p class="muted">Código <span class="mono">${esc(u.codigo)}</span></p></div>
         <button class="btn-link" id="back">Volver</button>
       </header>
-      <form id="assign" class="card stack">
+      <div class="card plan-card">
+        ${vig ? `<button class="plan-title" id="rename-plan" aria-label="Renombrar planificación">
+            <span><strong>${esc(vig.nombre)}</strong><br><span class="muted small">Vigente desde ${esc(fechaMedia(vig.inicio))}</span></span>
+            <span class="edit-hint">Renombrar</span></button>`
+          : '<p class="muted">Sin planificación. Se crea sola al asignar el primer ejercicio.</p>'}
+        <div class="grid-2" style="margin-top:12px">
+          <button class="btn-ghost" id="new-plan">Nueva planificación</button>
+          <button class="btn-ghost" id="hist">Histórico</button>
+        </div>
+      </div>
+      <form id="assign" class="card stack" style="margin-top:12px">
         <h2>Asignar ejercicio</h2>
         <div class="grid-2">
           <div><label for="ac">Categoría</label><select id="ac">${db.categorias.map(c => `<option value="${c.id}" ${c.id === adminCat ? 'selected' : ''}>${c.id} · ${esc(c.nombre)}</option>`).join('')}</select></div>
@@ -333,7 +360,7 @@
         ${x2Field('ax2', false)}
         <button class="btn-block" id="assign-btn">Asignar</button>
       </form>
-      <div class="section-title"><h2>Plan actual</h2><span class="muted small">${asig.length}</span></div>
+      <div class="section-title"><h2>Ejercicios de la planificación</h2><span class="muted small">${asig.length}</span></div>
       <div class="list">${asig.map(({ a }) => `
         <button class="list-item" data-edit-a="${esc(a.id)}">
           <span class="grow"><strong>${esc(exLabel(a.ejercicioId))}</strong><br>
@@ -341,6 +368,15 @@
           <span class="edit-hint">Editar</span></button>`).join('') || '<div class="empty">Sin ejercicios asignados.</div>'}</div>`;
 
     document.getElementById('back').onclick = () => go('#/admin');
+    document.getElementById('new-plan').onclick = () => go('#/admin/np/' + encodeURIComponent(codigo));
+    document.getElementById('hist').onclick = () => go('#/admin/h/' + encodeURIComponent(codigo));
+    const rp = document.getElementById('rename-plan');
+    if (rp) rp.onclick = async () => {
+      const nombre = prompt('Nombre de la planificación', vig.nombre);
+      if (!nombre || !nombre.trim()) return;
+      try { await api.call('renamePlan', { key: adminKey(), id: vig.id, nombre: nombre.trim() }); await loadAdmin(true); showAdminUser(codigo); }
+      catch (e) { toast(e.message); }
+    };
     const ac = document.getElementById('ac'), ae = document.getElementById('ae');
     const av = document.getElementById('av'), avWrap = document.getElementById('av-wrap');
     // La categoría "libera" los ejercicios, y el ejercicio sus variantes.
@@ -500,6 +536,105 @@
     };
   }
 
+  /* ---------- nueva planificación ---------- */
+  async function showNewPlan(codigo) {
+    if (!adminKey()) return renderAdminLogin();
+    loading();
+    try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
+    const u = adminDb.usuarios.find(x => x.codigo === codigo);
+    if (!u) return go('#/admin');
+    const n = adminDb.asignaciones.filter(a => a.codigo === codigo).length;
+    const hoy = new Date().toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const backTo = '#/admin/u/' + encodeURIComponent(codigo);
+    $app.innerHTML = `
+      <header class="top">
+        <div><h1>Nueva planificación</h1><p class="muted">Para ${esc(u.nombre)}</p></div>
+        <button class="btn-link" id="back">Volver</button>
+      </header>
+      <form id="f" class="card stack">
+        <div><label for="pn">Nombre (opcional)</label><input id="pn" placeholder="Planificación ${esc(hoy)}"></div>
+        ${n ? `<label class="check"><input type="checkbox" id="cp" checked>
+          <span>Empezar con los ${n} ejercicios de la actual, para cambiar solo lo necesario</span></label>` : ''}
+        <p class="muted small">${n ? 'La planificación actual se cierra hoy y pasa al histórico tal como está.' : 'Empezará vacía.'}
+          ${esc(u.nombre)} verá la nueva al entrar.</p>
+        <button class="btn-block">Crear planificación</button>
+      </form>`;
+    document.getElementById('back').onclick = () => go(backTo);
+    document.getElementById('f').onsubmit = async ev => {
+      ev.preventDefault();
+      const cp = document.getElementById('cp');
+      try {
+        const p = await api.call('newPlan', { key: adminKey(), codigo, nombre: document.getElementById('pn').value, copiar: cp ? cp.checked : false });
+        await loadAdmin(true); toast(`Creada: ${p.nombre}`); go(backTo);
+      } catch (err) { toast(err.message); }
+    };
+  }
+
+  /* ---------- histórico (lo usan el usuario y el administrador) ---------- */
+  function renderHistory(hist, titulo, backTo) {
+    const pct = (a, b) => (b ? Math.min(100, Math.round(a / b * 100)) : 0);
+    const planes = hist.map((p, i) => {
+      const medias = p.dias.map(d => pct(d.hechas, p.seriesPorDia));
+      const media = medias.length ? Math.round(medias.reduce((s, x) => s + x, 0) / medias.length) : 0;
+      return `
+        <details class="cat hist-plan" ${i === 0 ? 'open' : ''}>
+          <summary>
+            <span class="cat-title"><h2>${esc(p.nombre)}</h2>
+              <p>${esc(fechaMedia(p.inicio))} – ${p.fin ? esc(fechaMedia(p.fin)) : 'hoy'} · ${p.dias.length} día${p.dias.length === 1 ? '' : 's'} entrenado${p.dias.length === 1 ? '' : 's'}${p.dias.length ? ` · ${media}% de media` : ''}</p></span>
+            <span class="chev" aria-hidden="true"></span>
+          </summary>
+          <div class="cat-body">
+            ${p.dias.map(d => `
+              <details class="hist-day">
+                <summary>
+                  <span class="grow">${esc(fechaDia(d.fecha))}</span>
+                  <span class="mini-bar"><span style="width:${pct(d.hechas, p.seriesPorDia)}%"></span></span>
+                  <span class="muted small hist-n">${d.hechas}/${p.seriesPorDia}</span>
+                </summary>
+                ${d.items.map(e => `
+                  <div class="hist-item">
+                    <span class="ex-id">${esc(e.ejercicioId)}</span>
+                    <span class="grow">${esc([e.nombre, e.varianteNombre].filter(Boolean).join(' — '))}
+                      <br><span class="muted small">${e.hechas} de ${dose(e)}</span></span>
+                    ${e.hechas >= e.series ? '<span class="ok">✓</span>' : ''}
+                  </div>`).join('')}
+              </details>`).join('') || '<p class="empty small">Sin días entrenados.</p>'}
+            <details class="hist-day hist-presc">
+              <summary><span class="grow">Lo que tenía asignado</span><span class="muted small">${p.ejercicios.length} ejercicios</span></summary>
+              ${p.ejercicios.map(e => `
+                <div class="hist-item"><span class="ex-id">${esc(e.ejercicioId)}</span>
+                  <span class="grow">${esc([e.nombre, e.varianteNombre].filter(Boolean).join(' — '))}
+                    <br><span class="muted small">${dose(e)}</span></span></div>`).join('')}
+            </details>
+          </div>
+        </details>`;
+    }).join('');
+    $app.innerHTML = `
+      <header class="top"><div><h1>Histórico</h1><p class="muted">${esc(titulo)}</p></div>
+        <button class="btn-link" id="back">Volver</button></header>
+      ${planes || '<div class="card empty">Todavía no hay histórico.</div>'}
+      ${hist.some(p => p.dias.some(d => d.items.some(i => i.x2))) ? `<p class="legend">${X2_HELP}</p>` : ''}`;
+    document.getElementById('back').onclick = () => go(backTo);
+  }
+
+  async function showHistory() {
+    const codigo = store.get('codigo');
+    if (!codigo) return go('#/');
+    loading();
+    try { renderHistory(await api.call('getHistory', { codigo }), plan ? plan.nombre : '', '#/plan'); }
+    catch (e) { toast(e.message); go('#/plan'); }
+  }
+
+  async function showAdminHistory(codigo) {
+    if (!adminKey()) return renderAdminLogin();
+    loading();
+    try {
+      await loadAdmin();
+      const u = adminDb.usuarios.find(x => x.codigo === codigo);
+      renderHistory(await api.call('adminHistory', { key: adminKey(), codigo }), u ? u.nombre : codigo, '#/admin/u/' + encodeURIComponent(codigo));
+    } catch (e) { toast(e.message); go('#/admin'); }
+  }
+
   /* ================= RUTAS ================= */
   function route() {
     const h = location.hash || '#/';
@@ -510,6 +645,9 @@
     if (h.startsWith('#/admin/u/')) return showAdminUser(decodeURIComponent(h.slice(10)));
     if (h.startsWith('#/admin/ej/')) return showEditExercise(decodeURIComponent(h.slice(11)));
     if (h.startsWith('#/admin/a/')) return showEditAssignment(decodeURIComponent(h.slice(10)));
+    if (h.startsWith('#/admin/np/')) return showNewPlan(decodeURIComponent(h.slice(11)));
+    if (h.startsWith('#/admin/h/')) return showAdminHistory(decodeURIComponent(h.slice(10)));
+    if (h === '#/historial') return showHistory();
     if (store.get('codigo')) return go('#/plan');
     renderLogin();
   }
