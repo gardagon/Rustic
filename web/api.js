@@ -6,12 +6,18 @@
 
   async function remote(action, params = {}) {
     // text/plain evita la petición previa CORS, que Apps Script no admite.
-    const res = await fetch(URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...params })
-    });
-    const json = await res.json();
+    let res, json;
+    try {
+      res = await fetch(URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, ...params })
+      });
+    } catch {
+      throw new Error('Sin conexión con el servidor. Comprueba tu internet.');
+    }
+    try { json = await res.json(); }
+    catch { throw new Error('El servidor no responde bien (' + res.status + '). Revisa la implementación de Apps Script.'); }
     if (!json.ok) throw new Error(json.error || 'Error del servidor');
     return json.data;
   }
