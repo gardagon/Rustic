@@ -17,7 +17,7 @@
   }
 
   /* ---------------- MODO DEMO ---------------- */
-  const KEY = 'rustic-demo-db-v2';
+  const KEY = 'rustic-demo-db-v3';
   const UNIDADES = ['reps', 'seg', 'min'];
   const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
@@ -30,10 +30,10 @@
     for (let c = 1; c <= 9; c++) LETRAS.forEach(l => catalogo.push({ id: c + l, categoria: c, letra: l, variante: 0, nombre: '', video: '', activo: true }));
     const nombre = (id, n) => (catalogo.find(e => e.id === id).nombre = n);
     nombre('1D', 'Sentadilla'); nombre('1E', 'Zancada'); nombre('2D', 'Flexiones');
-    nombre('3D', 'Plancha'); nombre('3E', 'Dead bug'); nombre('4E', 'Remo anillas');
+    nombre('3D', 'Plancha'); nombre('3E', 'Dead bug'); nombre('5A', 'Superman'); nombre('4E', 'Remo anillas');
     catalogo.push({ id: '4E1', categoria: 4, letra: 'E', variante: 1, nombre: 'Anilla al pecho', video: '', activo: true });
     catalogo.push({ id: '4E2', categoria: 4, letra: 'E', variante: 2, nombre: 'Anilla a la cadera', video: '', activo: true });
-    const a = (id, ej, cantidad, unidad, series) => ({ id, codigo: 'DEMO', ejercicioId: ej, cantidad, unidad, series });
+    const a = (id, ej, cantidad, unidad, series, x2 = false) => ({ id, codigo: 'DEMO', ejercicioId: ej, cantidad, unidad, series, x2 });
     return {
       categorias, catalogo,
       usuarios: [{ codigo: 'DEMO', nombre: 'Ana' }],
@@ -42,7 +42,8 @@
         a('A2', '1D', 12, 'reps', 3),
         a('A3', '2D', 10, 'reps', 4),
         a('A4', '3D', 45, 'seg', 3),
-        a('A5', '4E1', 10, 'reps', 3),
+        a('A7', '5A', 8, 'reps', 3, true),
+        a('A5', '4E1', 10, 'reps', 3, true),
         a('A6', '4E2', 8, 'reps', 2)
       ],
       registro: []
@@ -56,6 +57,10 @@
   const dose = r => {
     if (!UNIDADES.includes(r.unidad)) throw new Error('Unidad no válida');
     if (!(+r.cantidad > 0) || !(+r.series >= 1 && +r.series <= 20)) throw new Error('Cantidad o series no válidas');
+  };
+  const notInPlan = (db, codigo, ejercicioId, exceptId) => {
+    if (db.asignaciones.some(a => a.id !== exceptId && nid(a.codigo) === nid(codigo) && a.ejercicioId === ejercicioId))
+      throw new Error(ejercicioId + ' ya está en este plan. Edítalo en lugar de añadirlo otra vez.');
   };
   function describe(id, db) {
     const e = active(db).find(x => x.id === id);
@@ -79,7 +84,7 @@
         ejercicios: db.asignaciones.filter(a => nid(a.codigo) === c).map(a => {
           const d = describe(a.ejercicioId, db);
           if (!d) return null;
-          return { ...d, asignacionId: a.id, cantidad: a.cantidad, unidad: a.unidad, series: a.series,
+          return { ...d, asignacionId: a.id, cantidad: a.cantidad, unidad: a.unidad, series: a.series, x2: !!a.x2,
             hechas: db.registro.filter(r => r.asignacionId === a.id && r.fecha === hoy).map(r => r.serie) };
         }).filter(Boolean).sort(sortEj)
       };
@@ -130,21 +135,23 @@
     renameCategory({ key, id, nombre }) {
       admin(key); const db = load(); db.categorias.find(c => c.id === +id).nombre = nombre; save(db); return true;
     },
-    addAssignment({ key, codigo, ejercicioId, cantidad, unidad, series }) {
+    addAssignment({ key, codigo, ejercicioId, cantidad, unidad, series, x2 }) {
       admin(key); const db = load(); dose({ cantidad, unidad, series });
       if (!active(db).some(e => e.id === nid(ejercicioId))) throw new Error('Ejercicio no encontrado');
+      notInPlan(db, codigo, nid(ejercicioId), null);
       const a = { id: 'A' + Date.now().toString(36).toUpperCase() + code(3), codigo: nid(codigo), ejercicioId: nid(ejercicioId),
-        cantidad: +cantidad, unidad, series: +series };
+        cantidad: +cantidad, unidad, series: +series, x2: !!x2 };
       db.asignaciones.push(a); save(db); return { id: a.id };
     },
-    updateAssignment({ key, id, ejercicioId, cantidad, unidad, series }) {
+    updateAssignment({ key, id, ejercicioId, cantidad, unidad, series, x2 }) {
       admin(key); const db = load(), a = db.asignaciones.find(x => x.id === id);
       if (!a) throw new Error('No encontrado'); dose({ cantidad, unidad, series });
       if (ejercicioId) {
         if (!active(db).some(e => e.id === nid(ejercicioId))) throw new Error('Ejercicio no encontrado');
+        notInPlan(db, a.codigo, nid(ejercicioId), id);
         a.ejercicioId = nid(ejercicioId);
       }
-      Object.assign(a, { cantidad: +cantidad, unidad, series: +series }); save(db); return true;
+      Object.assign(a, { cantidad: +cantidad, unidad, series: +series, x2: !!x2 }); save(db); return true;
     },
     removeAssignment({ key, id }) {
       admin(key); const db = load(); db.asignaciones = db.asignaciones.filter(a => a.id !== id); save(db); return true;

@@ -18,7 +18,10 @@
   }
   const go = h => { if (location.hash === h) route(); else location.hash = h; };
   const loading = () => ($app.innerHTML = '<div class="loading">Cargando…</div>');
-  const dose = e => `${e.series} × ${e.cantidad} ${UNIT[e.unidad] || e.unidad}`;
+  const dose = e => `${+e.series} × ${+e.cantidad}${e.x2 ? ' x<sub>2</sub>' : ''} ${esc(UNIT[e.unidad] || e.unidad)}`;
+  const X2_HELP = 'x<sub>2</sub>: la repetición cuenta cuando la has hecho con los dos lados, o ida y vuelta.';
+  const x2Field = (id, on) => `<label class="check"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}>
+    <span>x<sub>2</sub> · cuenta con los dos lados / ida y vuelta</span></label>`;
   const fechaLarga = iso => {
     const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -121,7 +124,8 @@
       ${total ? `<div class="progress" style="margin-bottom:20px">
         <div class="progress-bar"><div style="width:${pct}%"></div></div>
         <p class="progress-label">${done} de ${total} series hechas hoy</p></div>` : ''}
-      ${cats || '<div class="card empty">Todavía no tienes ejercicios asignados.</div>'}`;
+      ${cats || '<div class="card empty">Todavía no tienes ejercicios asignados.</div>'}
+      ${plan.ejercicios.some(e => e.x2) ? `<p class="legend">${X2_HELP}</p>` : ''}`;
 
     document.getElementById('logout').onclick = () => { store.set('codigo', null); plan = null; openCats.clear(); go('#/'); };
     $app.querySelectorAll('details.cat').forEach(d => d.addEventListener('toggle', () => {
@@ -142,7 +146,7 @@
           <div>
             <div class="ex-name"><span class="ex-id">${esc(e.ejercicioId)}</span>${e.nombre ? ' ' + esc(e.nombre) : ''}</div>
             ${e.varianteNombre ? `<div class="ex-var">${esc(e.varianteNombre)}</div>` : ''}
-            <div class="ex-meta"><span class="dose">${esc(dose(e))}</span></div>
+            <div class="ex-meta"><span class="dose">${dose(e)}</span></div>
           </div>
           ${e.video ? `<a class="btn video-btn" href="${esc(e.video)}" target="_blank" rel="noopener">▶ Vídeo</a>` : ''}
         </div>
@@ -274,11 +278,15 @@
   }
 
   // Desplegable de variante: el ejercicio base y sus variantes.
-  function variantOptions(base, selected) {
+  // taken: IDs que ya están en el plan del usuario (se muestran desactivados).
+  function variantOptions(base, selected, taken = new Set()) {
     const vs = variantsOf(base);
     if (!vs.length) return '';
-    return [base, ...vs].map(e => `<option value="${esc(e.id)}" ${e.id === selected ? 'selected' : ''}>${
-      e.variante ? `${esc(e.id)} · ${esc(e.nombre || 'Sin nombre')}` : `Sin variante (${esc(e.id)})`}</option>`).join('');
+    return [base, ...vs].map(e => {
+      const off = taken.has(e.id) && e.id !== selected;
+      return `<option value="${esc(e.id)}" ${e.id === selected ? 'selected' : ''} ${off ? 'disabled' : ''}>${
+        e.variante ? `${esc(e.id)} · ${esc(e.nombre || 'Sin nombre')}` : `Sin variante (${esc(e.id)})`}${off ? ' · ya en el plan' : ''}</option>`;
+    }).join('');
   }
 
   async function showAdminUser(codigo) {
@@ -309,36 +317,53 @@
           <div><label for="au">Unidad</label><select id="au">${db.unidades.map(x => `<option>${x}</option>`).join('')}</select></div>
           <div><label for="as">Series</label><input id="as" type="number" inputmode="numeric" min="1" max="20" value="3" required></div>
         </div>
-        <button class="btn-block">Asignar</button>
+        ${x2Field('ax2', false)}
+        <button class="btn-block" id="assign-btn">Asignar</button>
       </form>
       <div class="section-title"><h2>Plan actual</h2><span class="muted small">${asig.length}</span></div>
       <div class="list">${asig.map(({ a }) => `
         <button class="list-item" data-edit-a="${esc(a.id)}">
           <span class="grow"><strong>${esc(exLabel(a.ejercicioId))}</strong><br>
-            <span class="muted small">${esc(dose(a))}</span></span>
+            <span class="muted small">${dose(a)}</span></span>
           <span class="edit-hint">Editar</span></button>`).join('') || '<div class="empty">Sin ejercicios asignados.</div>'}</div>`;
 
     document.getElementById('back').onclick = () => go('#/admin');
     const ac = document.getElementById('ac'), ae = document.getElementById('ae');
     const av = document.getElementById('av'), avWrap = document.getElementById('av-wrap');
     // La categoría "libera" los ejercicios, y el ejercicio sus variantes.
+    // No se puede repetir un ejercicio en el mismo plan: lo ya asignado sale desactivado.
+    const taken = new Set(asig.map(({ a }) => a.ejercicioId));
+    const btn = document.getElementById('assign-btn');
     const fillVariants = () => {
-      const opts = variantOptions(byId(ae.value), ae.value);
+      const base = byId(ae.value);
+      const opts = base ? variantOptions(base, null, taken) : '';
       av.innerHTML = opts; avWrap.hidden = !opts;
+      if (opts) { const free = [...av.options].find(o => !o.disabled); if (free) av.value = free.value; }
+      updateBtn();
+    };
+    const updateBtn = () => {
+      const id = avWrap.hidden ? ae.value : av.value;
+      btn.disabled = !id || taken.has(id);
+      btn.textContent = btn.disabled ? 'Ya está en el plan' : 'Asignar';
     };
     const fillExercises = () => {
       adminCat = +ac.value;
-      ae.innerHTML = db.catalogo.filter(e => e.categoria === +ac.value && !e.variante)
-        .map(e => `<option value="${esc(e.id)}">${esc(exLabel(e.id))}</option>`).join('');
+      ae.innerHTML = db.catalogo.filter(e => e.categoria === +ac.value && !e.variante).map(e => {
+        // Un base sin variantes que ya está asignado no aporta nada nuevo.
+        const full = taken.has(e.id) && variantsOf(e).every(v => taken.has(v.id));
+        return `<option value="${esc(e.id)}" ${full ? 'disabled' : ''}>${esc(exLabel(e.id))}${full ? ' · ya en el plan' : ''}</option>`;
+      }).join('');
+      const free = [...ae.options].find(o => !o.disabled); if (free) ae.value = free.value;
       fillVariants();
     };
+    av.onchange = updateBtn;
     ac.onchange = fillExercises; ae.onchange = fillVariants; fillExercises();
     document.getElementById('assign').onsubmit = async ev => {
       ev.preventDefault();
       try {
         await api.call('addAssignment', { key: adminKey(), codigo, ejercicioId: avWrap.hidden ? ae.value : av.value,
           cantidad: +document.getElementById('aq').value, unidad: document.getElementById('au').value,
-          series: +document.getElementById('as').value });
+          series: +document.getElementById('as').value, x2: document.getElementById('ax2').checked });
         await loadAdmin(true); toast('Asignado'); showAdminUser(codigo);
       } catch (e) { toast(e.message); }
     };
@@ -423,7 +448,8 @@
     const e = byId(a.ejercicioId);
     const u = db.usuarios.find(x => x.codigo === a.codigo);
     const backTo = '#/admin/u/' + encodeURIComponent(a.codigo);
-    const vOpts = e ? variantOptions(baseOf(e), e.id) : '';
+    const taken = new Set(db.asignaciones.filter(x => x.codigo === a.codigo && x.id !== a.id).map(x => x.ejercicioId));
+    const vOpts = e ? variantOptions(baseOf(e), e.id, taken) : '';
 
     $app.innerHTML = `
       <header class="top">
@@ -437,6 +463,7 @@
           <div><label for="un">Unidad</label><select id="un">${db.unidades.map(x => `<option ${x === a.unidad ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
           <div><label for="s">Series</label><input id="s" type="number" inputmode="numeric" min="1" max="20" value="${a.series}" required></div>
         </div>
+        ${x2Field('x2', a.x2)}
         <button class="btn-block">Guardar</button>
       </form>
       <div class="spacer"></div>
@@ -448,7 +475,8 @@
       const va = document.getElementById('va');
       try {
         await api.call('updateAssignment', { key: adminKey(), id, ejercicioId: va ? va.value : undefined,
-          cantidad: +document.getElementById('q').value, unidad: document.getElementById('un').value, series: +document.getElementById('s').value });
+          cantidad: +document.getElementById('q').value, unidad: document.getElementById('un').value, series: +document.getElementById('s').value,
+          x2: document.getElementById('x2').checked });
         await loadAdmin(true); toast('Guardado'); go(backTo);
       } catch (err) { toast(err.message); }
     };

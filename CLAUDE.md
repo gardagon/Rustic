@@ -32,7 +32,7 @@ apps-script/
 | Categorias | id (1–9), nombre |
 | Catalogo | id, categoria, letra, variante, nombre, video, activo |
 | Usuarios | codigo, nombre, activo |
-| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, orden, activo |
+| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, x2, orden, activo |
 | Registro | fecha (yyyy-MM-dd, Europe/Madrid), codigo, asignacionId, ejercicioId, serie, timestamp |
 
 Decisiones tomadas:
@@ -41,6 +41,8 @@ Decisiones tomadas:
 - El nombre puede quedar vacío a propósito: p. ej. A, B y C cambian cada clase y los explica el entrenador. En pantalla se muestra solo el ID.
 - Cada variante tiene su nombre y su vídeo; si no tiene vídeo, usa el del ejercicio base. Una asignación apunta a un base (`4E`) o a una variante (`4E1`).
 - Los números de variante eliminada no se reutilizan, para que el histórico no se mezcle.
+- `x2` (se muestra como x₂ junto a la cantidad): la repetición cuenta al hacerla con los dos lados (curl con ambos brazos) o ida y vuelta (empujes en pista). Es de la asignación, no del ejercicio: el entrenador lo decide en cada plan.
+- Un mismo ID no puede estar dos veces en el plan activo de un usuario (se edita, no se duplica). Variantes distintas del mismo ejercicio (4E1 y 4E2) sí pueden convivir.
 - Códigos de usuario aleatorios de 6 caracteres sin 0/O/1/I.
 - Borrado lógico (`activo = FALSE`), nunca se borran filas salvo en Registro al desmarcar una serie.
 - Los ejercicios base no se eliminan (son fijos, A–Z). Una variante no se puede eliminar mientras esté asignada.

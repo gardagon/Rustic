@@ -163,3 +163,7 @@ button:disabled { opacity: .5; cursor: default; }
 .cat-picker button { min-height: 44px; padding: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line); font-size: 16px; }
 .cat-picker button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .list-item > .grow { flex: 1; min-width: 0; }
+.dose sub, .muted sub, .legend sub, .check sub { font-size: .7em; vertical-align: sub; line-height: 0; }
+.legend { font-size: 13px; color: var(--ink-soft); margin-top: 16px; padding: 0 4px; }
+.check { display: flex; align-items: center; gap: 12px; min-height: 48px; margin: 0; font-size: 15px; font-weight: 500; color: var(--ink); cursor: pointer; }
+.check input { width: 24px; height: 24px; min-height: 0; padding: 0; flex: none; appearance: auto; -webkit-appearance: checkbox; accent-color: var(--accent); }

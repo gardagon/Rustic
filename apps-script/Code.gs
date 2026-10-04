@@ -15,8 +15,10 @@
  *   Catalogo     id | categoria | letra | variante | nombre | video | activo
  *                (variante vacía = ejercicio base; 1, 2… = variante)
  *   Usuarios     codigo | nombre | activo
- *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | orden | activo
- *                (ejercicioId puede ser un base, 4E, o una variante, 4E1)
+ *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | x2 | orden | activo
+ *                (ejercicioId puede ser un base, 4E, o una variante, 4E1.
+ *                 x2 = TRUE: una repetición cuenta al hacerla con ambos lados, o ida y vuelta.
+ *                 Un mismo ejercicioId no puede repetirse en el plan activo de un usuario.)
  *   Registro     fecha | codigo | asignacionId | ejercicioId | serie | timestamp
  *
  * Puesta en marcha: ver README.md del repositorio.
@@ -31,7 +33,7 @@ var HEADERS = {
   Categorias: ['id', 'nombre'],
   Catalogo: ['id', 'categoria', 'letra', 'variante', 'nombre', 'video', 'activo'],
   Usuarios: ['codigo', 'nombre', 'activo'],
-  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'orden', 'activo'],
+  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'x2', 'orden', 'activo'],
   Registro: ['fecha', 'codigo', 'asignacionId', 'ejercicioId', 'serie', 'timestamp']
 };
 
@@ -220,6 +222,7 @@ function getPlan_(codigo) {
     d.cantidad = Number(a.cantidad);
     d.unidad = a.unidad;
     d.series = Number(a.series);
+    d.x2 = isTrue_(a.x2);
     d.hechas = hechas[a.id] || [];
     ejercicios.push(d);
   });
@@ -281,7 +284,7 @@ function adminData_() {
     asignaciones: readTable_('Asignaciones').filter(function (a) { return isActive_(a.activo); }).map(function (a) {
       return {
         id: a.id, codigo: a.codigo, ejercicioId: normId_(a.ejercicioId), cantidad: Number(a.cantidad),
-        unidad: a.unidad, series: Number(a.series), orden: Number(a.orden) || 0
+        unidad: a.unidad, series: Number(a.series), x2: isTrue_(a.x2), orden: Number(a.orden) || 0
       };
     })
   };
@@ -310,22 +313,33 @@ function addAssignment_(r) {
   if (!readTable_('Usuarios').some(function (u) { return normCode_(u.codigo) === codigo; })) throw new Error('Usuario no encontrado');
   if (!readCatalog_().some(function (e) { return e.id === ejercicioId; })) throw new Error('Ejercicio no encontrado');
   var d = validateDose_(r);
+  checkNotInPlan_(codigo, ejercicioId, null);
   var orden = readTable_('Asignaciones').filter(function (a) { return normCode_(a.codigo) === codigo; }).length + 1;
   var id = 'A' + Date.now().toString(36).toUpperCase() + randomCode_(3);
-  sheet_('Asignaciones').appendRow([id, codigo, ejercicioId, d.cantidad, r.unidad, d.series, orden, true]);
+  sheet_('Asignaciones').appendRow([id, codigo, ejercicioId, d.cantidad, r.unidad, d.series, !!r.x2, orden, true]);
   return { id: id };
 }
 
 function updateAssignment_(r) {
   var d = validateDose_(r);
-  var cambios = { cantidad: d.cantidad, unidad: r.unidad, series: d.series };
+  var cambios = { cantidad: d.cantidad, unidad: r.unidad, series: d.series, x2: !!r.x2 };
   if (r.ejercicioId) {
     // Permite cambiar de variante (4E → 4E2) sin quitar y volver a asignar.
     var nuevo = normId_(r.ejercicioId);
     if (!readCatalog_().some(function (e) { return e.id === nuevo; })) throw new Error('Ejercicio no encontrado');
+    var actual = readTable_('Asignaciones').filter(function (a) { return a.id === r.id; })[0];
+    if (!actual) throw new Error('No encontrado: ' + r.id);
+    checkNotInPlan_(actual.codigo, nuevo, r.id);
     cambios.ejercicioId = nuevo;
   }
   return updateRow_('Asignaciones', 'id', r.id, cambios);
+}
+
+function checkNotInPlan_(codigo, ejercicioId, exceptId) {
+  var dup = readTable_('Asignaciones').some(function (a) {
+    return a.id !== exceptId && isActive_(a.activo) && normCode_(a.codigo) === normCode_(codigo) && normId_(a.ejercicioId) === ejercicioId;
+  });
+  if (dup) throw new Error(ejercicioId + ' ya está en este plan. Edítalo en lugar de añadirlo otra vez.');
 }
 
 /* ------------------------------------------------------------------ */
@@ -386,6 +400,7 @@ function withLock_(fn) {
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
+function isTrue_(v) { return v === true || String(v).toUpperCase() === 'TRUE'; }
 function isActive_(v) { return v === '' || v === true || String(v).toUpperCase() === 'TRUE'; }
 function normCode_(c) { return String(c || '').trim().toUpperCase(); }
 function normId_(c) { return String(c || '').trim().toUpperCase(); }
