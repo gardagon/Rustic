@@ -37,7 +37,7 @@ apps-script/
 
 Decisiones tomadas:
 - Tablas comunes, no una pestaña por usuario: permite histórico y un único catálogo. La comodidad del responsable se resuelve con el modo administrador de la app.
-- Nomenclatura del entrenador: ejercicio base = categoría + letra (`4E`, de `1A` a `9Z`); variante = base + número (`4E1`, `4E2`). setup() crea los 234 ejercicios base sin nombre; las variantes las añade el administrador.
+- Nomenclatura del entrenador: ejercicio base = categoría + letra (`4E`, de `1A` a `9Z`, con Ñ entre N y O); variante = base + número (`4E1`, `4E2`). setup() crea los 243 ejercicios base sin nombre; las variantes las añade el administrador.
 - El nombre puede quedar vacío a propósito: p. ej. A, B y C cambian cada clase y los explica el entrenador. En pantalla se muestra solo el ID.
 - Cada variante tiene su nombre y su vídeo; si no tiene vídeo, usa el del ejercicio base. Una asignación apunta a un base (`4E`) o a una variante (`4E1`).
 - Los números de variante eliminada no se reutilizan, para que el histórico no se mezcle.

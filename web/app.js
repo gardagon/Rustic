@@ -34,6 +34,8 @@
   const openCats = new Set();
 
   /* ---------- catálogo (admin) ---------- */
+  const LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+  const letraIdx = l => { const i = LETRAS.indexOf(l); return i < 0 ? 100 + l.charCodeAt(0) : i; };
   const byId = id => adminDb.catalogo.find(e => e.id === id);
   const baseOf = e => (e.variante ? byId(e.categoria + e.letra) : e);
   const variantsOf = base => adminDb.catalogo.filter(e => e.categoria === base.categoria && e.letra === base.letra && e.variante);
@@ -298,7 +300,7 @@
     if (!u) return go('#/admin');
     const asig = db.asignaciones.filter(a => a.codigo === codigo)
       .map(a => ({ a, e: byId(a.ejercicioId) }))
-      .sort((x, y) => (x.e && y.e ? x.e.categoria - y.e.categoria || x.e.letra.localeCompare(y.e.letra) || x.e.variante - y.e.variante : 0));
+      .sort((x, y) => (x.e && y.e ? x.e.categoria - y.e.categoria || letraIdx(x.e.letra) - letraIdx(y.e.letra) || x.e.variante - y.e.variante : 0));
 
     $app.innerHTML = `
       <header class="top">

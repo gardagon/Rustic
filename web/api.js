@@ -23,12 +23,13 @@
   }
 
   /* ---------------- MODO DEMO ---------------- */
-  const KEY = 'rustic-demo-db-v3';
+  const KEY = 'rustic-demo-db-v4';
   const UNIDADES = ['reps', 'seg', 'min'];
-  const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
   const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
   const nid = s => String(s || '').trim().toUpperCase();
-  const sortEj = (a, b) => a.categoria - b.categoria || a.letra.localeCompare(b.letra) || a.variante - b.variante;
+  const letraIdx = l => { const i = LETRAS.indexOf(l); return i < 0 ? 100 + l.charCodeAt(0) : i; };
+  const sortEj = (a, b) => a.categoria - b.categoria || letraIdx(a.letra) - letraIdx(b.letra) || a.variante - b.variante;
 
   function seed() {
     const categorias = Array.from({ length: 9 }, (_, i) => ({ id: i + 1, nombre: 'Categoría ' + (i + 1) }));

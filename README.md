@@ -3,7 +3,7 @@
 Plan de ejercicios por usuario, con la Google Sheet como base de datos. Web app instalable en el móvil (PWA).
 
 - **Usuario:** entra con su código, ve sus ejercicios en 9 categorías y marca cada serie que hace.
-- **Administrador:** crea usuarios, pone nombre y vídeo a los ejercicios (de `1A` a `9Z`), les añade variantes (`4E1`, `4E2`…) y los asigna.
+- **Administrador:** crea usuarios, pone nombre y vídeo a los ejercicios (de `1A` a `9Z`, con Ñ), les añade variantes (`4E1`, `4E2`…) y los asigna.
 
 La app arranca en **modo demo** (sin backend): código `DEMO`, clave de administrador `admin`.
 

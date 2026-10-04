@@ -5,9 +5,9 @@
  * "Aplicación web" y la PWA le habla por HTTP (POST con JSON).
  *
  * Nomenclatura de ejercicios (la del entrenador):
- *   - Ejercicio base: número de categoría + letra A–Z.   Ej: 4E
+ *   - Ejercicio base: número de categoría + letra A–Z (con Ñ).   Ej: 4E
  *   - Variante:       ejercicio base + número 1, 2, …     Ej: 4E1, 4E2
- *   setup() crea los 9 × 26 = 234 ejercicios base sin nombre; las variantes las añade el administrador.
+ *   setup() crea los 9 × 27 = 243 ejercicios base sin nombre; las variantes las añade el administrador.
  *   El nombre puede quedar vacío (p. ej. A, B y C, que el entrenador explica en clase).
  *
  * Pestañas (las crea setup()):
@@ -25,7 +25,8 @@
  */
 
 var NUM_CATEGORIAS = 9;
-var LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+// Alfabeto español: la Ñ va entre la N y la O. El orden de la app sale de aquí.
+var LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
 var UNIDADES = ['reps', 'seg', 'min'];
 var TZ = 'Europe/Madrid';
 
@@ -385,8 +386,13 @@ function indexById_(arr) {
   return o;
 }
 
+function letraIdx_(l) {
+  var i = LETRAS.indexOf(l);
+  return i < 0 ? 100 + String(l).charCodeAt(0) : i; // letras fuera del alfabeto, al final
+}
+
 function sortEj_(a, b) {
-  return a.categoria - b.categoria || (a.letra < b.letra ? -1 : a.letra > b.letra ? 1 : 0) || a.variante - b.variante;
+  return a.categoria - b.categoria || letraIdx_(a.letra) - letraIdx_(b.letra) || a.variante - b.variante;
 }
 
 function requireAdmin_(key) {
