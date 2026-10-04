@@ -30,6 +30,9 @@
  * Puesta en marcha: ver README.md del repositorio.
  */
 
+// Súbelo cuando cambie el esquema de la hoja: la primera petición tras publicar ejecuta setup() sola.
+var SCHEMA_VERSION = 2;
+
 var NUM_CATEGORIAS = 9;
 // Alfabeto español: la Ñ va entre la N y la O. El orden de la app sale de aquí.
 var LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
@@ -108,6 +111,17 @@ function setup() {
   Logger.log('Guárdala. Para cambiarla: Configuración del proyecto > Propiedades del script > ADMIN_KEY');
 }
 
+// Migración automática: si la hoja está en un esquema anterior, se pone al día una sola vez.
+function ensureSchema_() {
+  var props = PropertiesService.getScriptProperties();
+  if (Number(props.getProperty('SCHEMA_VERSION')) >= SCHEMA_VERSION) return;
+  withLock_(function () {
+    if (Number(props.getProperty('SCHEMA_VERSION')) >= SCHEMA_VERSION) return;
+    setup();
+    props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
+  });
+}
+
 function textColumns_(name, cols) {
   var sh = sheet_(name);
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -150,6 +164,7 @@ function doGet() {
 
 function doPost(e) {
   try {
+    ensureSchema_();
     var req = JSON.parse(e.postData.contents || '{}');
     var fn = ACTIONS[req.action];
     if (!fn) throw new Error('Acción desconocida: ' + req.action);

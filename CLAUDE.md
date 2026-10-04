@@ -37,8 +37,9 @@ apps-script/
 | Registro | fecha (yyyy-MM-dd, Europe/Madrid), codigo, asignacionId, ejercicioId, serie, timestamp, planId, cantidad, unidad, series, x2 |
 
 Las columnas se localizan por su cabecera (`appendObj_`, `readTable_`), no por su posición. `setup()` es idempotente:
-crea lo que falta, añade columnas nuevas al final y migra datos antiguos; nunca borra. Hay que ejecutarlo tras
-cambios de esquema.
+crea lo que falta, añade columnas nuevas al final y migra datos antiguos; nunca borra. Se ejecuta solo: si
+`SCHEMA_VERSION` (en Code.gs) es mayor que la guardada en las propiedades del script, la primera petición lo lanza.
+Al cambiar el esquema, sube `SCHEMA_VERSION`. La web debe tolerar el backend anterior hasta que se publique.
 
 Decisiones tomadas:
 - Planificaciones por bloques: el entrenador cambia el plan entero según su criterio. "Nueva planificación" cierra la

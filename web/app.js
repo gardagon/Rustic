@@ -152,9 +152,9 @@
         <p class="progress-label">${done} de ${total} series hechas hoy</p></div>` : ''}
       ${cats || '<div class="card empty">Todavía no tienes ejercicios asignados.</div>'}
       ${plan.ejercicios.some(e => e.x2) ? `<p class="legend">${X2_HELP}</p>` : ''}
-      <button class="btn-ghost btn-block" id="hist" style="margin-top:20px">Ver mi histórico</button>`;
+      ${'plan' in plan ? '<button class="btn-ghost btn-block" id="hist" style="margin-top:20px">Ver mi histórico</button>' : ''}`;
 
-    document.getElementById('hist').onclick = () => go('#/historial');
+    const hb = document.getElementById('hist'); if (hb) hb.onclick = () => go('#/historial');
     document.getElementById('logout').onclick = () => { store.set('codigo', null); plan = null; openCats.clear(); go('#/'); };
     $app.querySelectorAll('details.cat').forEach(d => d.addEventListener('toggle', () => {
       d.open ? openCats.add(+d.dataset.cat) : openCats.delete(+d.dataset.cat);
@@ -335,7 +335,7 @@
         <div><h1>${esc(u.nombre)}</h1><p class="muted">Código <span class="mono">${esc(u.codigo)}</span></p></div>
         <button class="btn-link" id="back">Volver</button>
       </header>
-      <div class="card plan-card">
+      ${!db.planes ? '' : `<div class="card plan-card">
         ${vig ? `<button class="plan-title" id="rename-plan" aria-label="Renombrar planificación">
             <span><strong>${esc(vig.nombre)}</strong><br><span class="muted small">Vigente desde ${esc(fechaMedia(vig.inicio))}</span></span>
             <span class="edit-hint">Renombrar</span></button>`
@@ -344,7 +344,7 @@
           <button class="btn-ghost" id="new-plan">Nueva planificación</button>
           <button class="btn-ghost" id="hist">Histórico</button>
         </div>
-      </div>
+      </div>`}
       <form id="assign" class="card stack" style="margin-top:12px">
         <h2>Asignar ejercicio</h2>
         <div class="grid-2">
@@ -368,8 +368,11 @@
           <span class="edit-hint">Editar</span></button>`).join('') || '<div class="empty">Sin ejercicios asignados.</div>'}</div>`;
 
     document.getElementById('back').onclick = () => go('#/admin');
-    document.getElementById('new-plan').onclick = () => go('#/admin/np/' + encodeURIComponent(codigo));
-    document.getElementById('hist').onclick = () => go('#/admin/h/' + encodeURIComponent(codigo));
+    // Con el backend anterior (sin planificaciones) estos botones no aparecen.
+    if (db.planes) {
+      document.getElementById('new-plan').onclick = () => go('#/admin/np/' + encodeURIComponent(codigo));
+      document.getElementById('hist').onclick = () => go('#/admin/h/' + encodeURIComponent(codigo));
+    }
     const rp = document.getElementById('rename-plan');
     if (rp) rp.onclick = async () => {
       const nombre = prompt('Nombre de la planificación', vig.nombre);

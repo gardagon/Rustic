@@ -38,7 +38,7 @@ Desde ese momento la app usa la hoja real. Entra como administrador, pon nombre 
 
 > Cada vez que cambie `Code.gs`, hay que pegarlo de nuevo y en **Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva versión**. La URL no cambia.
 >
-> Si el cambio afecta a las pestañas de la hoja, ejecuta también `setup` otra vez. Es seguro: solo añade lo que falta y migra datos, nunca borra.
+> Si el cambio afecta a las pestañas de la hoja, no hace falta hacer nada más: la primera petición tras publicar pone la hoja al día sola (añade lo que falta y migra datos, nunca borra).
 
 ### 5. Trabajar desde el móvil
 Con el repositorio conectado a Claude, pide cambios desde la app del móvil sobre `rustic`. Cuando lleguen a `main`, se publican solos: recarga la app y pruébalos.
