@@ -156,3 +156,10 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .loading { padding: 60px 0; text-align: center; color: var(--ink-soft); }
 .edit-hint { font-size: 13px; color: var(--accent); font-weight: 600; flex: none; }
+.ex-id { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 700; font-size: .9em; background: var(--surface-2); color: var(--ink); padding: 2px 7px; border-radius: 6px; flex: none; }
+.ex-id-lg { font-size: 26px; padding: 2px 10px; }
+.ex-var { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
+.cat-picker { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+.cat-picker button { min-height: 44px; padding: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line); font-size: 16px; }
+.cat-picker button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.list-item > .grow { flex: 1; min-width: 0; }

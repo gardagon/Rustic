@@ -4,27 +4,34 @@
  * La Google Sheet es la base de datos. Este script se publica como
  * "Aplicación web" y la PWA le habla por HTTP (POST con JSON).
  *
+ * Nomenclatura de ejercicios (la del entrenador):
+ *   - Ejercicio base: número de categoría + letra A–Z.   Ej: 4E
+ *   - Variante:       ejercicio base + número 1, 2, …     Ej: 4E1, 4E2
+ *   setup() crea los 9 × 26 = 234 ejercicios base sin nombre; las variantes las añade el administrador.
+ *   El nombre puede quedar vacío (p. ej. A, B y C, que el entrenador explica en clase).
+ *
  * Pestañas (las crea setup()):
- *   Categorias   id | nombre                       (9 filas, editables)
- *   Variantes    nombre                            (lista de valores permitidos)
- *   Catalogo     id | categoria | nombre | video | activo
+ *   Categorias   id | nombre
+ *   Catalogo     id | categoria | letra | variante | nombre | video | activo
+ *                (variante vacía = ejercicio base; 1, 2… = variante)
  *   Usuarios     codigo | nombre | activo
- *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | variante | orden | activo
+ *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | orden | activo
+ *                (ejercicioId puede ser un base, 4E, o una variante, 4E1)
  *   Registro     fecha | codigo | asignacionId | ejercicioId | serie | timestamp
  *
  * Puesta en marcha: ver README.md del repositorio.
  */
 
 var NUM_CATEGORIAS = 9;
+var LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 var UNIDADES = ['reps', 'seg', 'min'];
 var TZ = 'Europe/Madrid';
 
 var HEADERS = {
   Categorias: ['id', 'nombre'],
-  Variantes: ['nombre'],
-  Catalogo: ['id', 'categoria', 'nombre', 'video', 'activo'],
+  Catalogo: ['id', 'categoria', 'letra', 'variante', 'nombre', 'video', 'activo'],
   Usuarios: ['codigo', 'nombre', 'activo'],
-  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'variante', 'orden', 'activo'],
+  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'orden', 'activo'],
   Registro: ['fecha', 'codigo', 'asignacionId', 'ejercicioId', 'serie', 'timestamp']
 };
 
@@ -42,6 +49,12 @@ function setup() {
     }
   });
 
+  // IDs, códigos y fechas como texto, para que Sheets no los convierta en números o fechas.
+  ss.getSheetByName('Catalogo').getRange('A:D').setNumberFormat('@');
+  ['Usuarios', 'Asignaciones', 'Registro'].forEach(function (n) {
+    ss.getSheetByName(n).getRange('A:C').setNumberFormat('@');
+  });
+
   var cat = ss.getSheetByName('Categorias');
   if (cat.getLastRow() < 2) {
     var rows = [];
@@ -49,15 +62,16 @@ function setup() {
     cat.getRange(2, 1, rows.length, 2).setValues(rows);
   }
 
-  var vari = ss.getSheetByName('Variantes');
-  if (vari.getLastRow() < 2) {
-    vari.getRange(2, 1, 3, 1).setValues([['Normal'], ['Variante A'], ['Variante B']]);
+  var catalogo = ss.getSheetByName('Catalogo');
+  if (catalogo.getLastRow() < 2) {
+    var ej = [];
+    for (var c = 1; c <= NUM_CATEGORIAS; c++) {
+      for (var l = 0; l < LETRAS.length; l++) {
+        ej.push([c + LETRAS[l], String(c), LETRAS[l], '', '', '', 'TRUE']);
+      }
+    }
+    catalogo.getRange(2, 1, ej.length, ej[0].length).setValues(ej);
   }
-
-  // IDs y códigos como texto, para que Sheets no los convierta en números o fechas.
-  ['Catalogo', 'Usuarios', 'Asignaciones', 'Registro'].forEach(function (n) {
-    ss.getSheetByName(n).getRange('A:C').setNumberFormat('@');
-  });
 
   // Quitar la "Hoja 1" vacía si existe.
   var def = ss.getSheetByName('Hoja 1') || ss.getSheetByName('Sheet1');
@@ -100,14 +114,82 @@ var ACTIONS = {
   adminLogin: function (r) { requireAdmin_(r.key); return true; },
   adminData: function (r) { requireAdmin_(r.key); return adminData_(); },
   addUser: function (r) { requireAdmin_(r.key); return withLock_(function () { return addUser_(r.nombre); }); },
-  addExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return addExercise_(r.categoria, r.nombre, r.video); }); },
   updateExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateExercise_(r.id, r.nombre, r.video); }); },
-  removeExercise: function (r) { requireAdmin_(r.key); return withLock_(function () { return removeExercise_(r.id); }); },
+  addVariant: function (r) { requireAdmin_(r.key); return withLock_(function () { return addVariant_(r.baseId, r.nombre, r.video); }); },
+  removeVariant: function (r) { requireAdmin_(r.key); return withLock_(function () { return removeVariant_(r.id); }); },
   renameCategory: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Categorias', 'id', r.id, { nombre: r.nombre }); }); },
   addAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return addAssignment_(r); }); },
   updateAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateAssignment_(r); }); },
   removeAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Asignaciones', 'id', r.id, { activo: false }); }); }
 };
+
+/* ------------------------------------------------------------------ */
+/*  CATÁLOGO                                                           */
+/* ------------------------------------------------------------------ */
+
+function readCatalog_() {
+  return readTable_('Catalogo').filter(function (e) { return isActive_(e.activo); }).map(function (e) {
+    return {
+      id: normId_(e.id),
+      categoria: Number(e.categoria),
+      letra: String(e.letra).toUpperCase(),
+      variante: e.variante === '' ? 0 : Number(e.variante),
+      nombre: e.nombre || '',
+      video: e.video || ''
+    };
+  });
+}
+
+// Describe un ejercicio o variante tal como lo ve el usuario.
+function describe_(id, byId) {
+  var e = byId[id];
+  if (!e) return null;
+  var base = e.variante ? byId[e.categoria + e.letra] : e;
+  return {
+    ejercicioId: e.id,
+    categoria: e.categoria,
+    letra: e.letra,
+    variante: e.variante,
+    nombre: base ? base.nombre : '',
+    varianteNombre: e.variante ? e.nombre : '',
+    // Una variante sin vídeo propio usa el del ejercicio base.
+    video: e.video || (base ? base.video : '')
+  };
+}
+
+function updateExercise_(id, nombre, video) {
+  id = normId_(id);
+  if (!readCatalog_().some(function (e) { return e.id === id; })) throw new Error('Ejercicio no encontrado: ' + id);
+  // El nombre puede quedar vacío a propósito (ejercicios que se explican en clase).
+  return updateRow_('Catalogo', 'id', id, { nombre: String(nombre || '').trim(), video: String(video || '').trim() });
+}
+
+function addVariant_(baseId, nombre, video) {
+  baseId = normId_(baseId);
+  var cat = readCatalog_();
+  var base = cat.filter(function (e) { return e.id === baseId && !e.variante; })[0];
+  if (!base) throw new Error('Ejercicio base no encontrado: ' + baseId);
+  // Se cuentan también las variantes eliminadas para no reutilizar su número.
+  var max = 0;
+  readTable_('Catalogo').forEach(function (e) {
+    if (Number(e.categoria) === base.categoria && String(e.letra).toUpperCase() === base.letra && e.variante !== '') {
+      max = Math.max(max, Number(e.variante));
+    }
+  });
+  var n = max + 1;
+  var id = baseId + n;
+  sheet_('Catalogo').appendRow([id, String(base.categoria), base.letra, String(n), String(nombre || '').trim(), String(video || '').trim(), 'TRUE']);
+  return { id: id, categoria: base.categoria, letra: base.letra, variante: n, nombre: String(nombre || '').trim(), video: String(video || '').trim() };
+}
+
+function removeVariant_(id) {
+  id = normId_(id);
+  var v = readCatalog_().filter(function (e) { return e.id === id; })[0];
+  if (!v || !v.variante) throw new Error('Solo se pueden eliminar variantes');
+  var enUso = readTable_('Asignaciones').some(function (a) { return normId_(a.ejercicioId) === id && isActive_(a.activo); });
+  if (enUso) throw new Error('Está asignada a algún usuario. Quítala de sus planes antes de eliminarla.');
+  return updateRow_('Catalogo', 'id', id, { activo: false });
+}
 
 /* ------------------------------------------------------------------ */
 /*  LÓGICA DE USUARIO                                                  */
@@ -120,11 +202,7 @@ function getPlan_(codigo) {
   })[0];
   if (!user) throw new Error('Código no válido');
 
-  var catalogo = indexBy_(readTable_('Catalogo'), 'id');
-  var asignaciones = readTable_('Asignaciones').filter(function (a) {
-    return normCode_(a.codigo) === codigo && isActive_(a.activo) && catalogo[a.ejercicioId];
-  });
-
+  var byId = indexById_(readCatalog_());
   var hoy = today_();
   var hechas = {};
   readTable_('Registro').forEach(function (r) {
@@ -133,26 +211,25 @@ function getPlan_(codigo) {
     }
   });
 
+  var ejercicios = [];
+  readTable_('Asignaciones').forEach(function (a) {
+    if (normCode_(a.codigo) !== codigo || !isActive_(a.activo)) return;
+    var d = describe_(normId_(a.ejercicioId), byId);
+    if (!d) return;
+    d.asignacionId = a.id;
+    d.cantidad = Number(a.cantidad);
+    d.unidad = a.unidad;
+    d.series = Number(a.series);
+    d.hechas = hechas[a.id] || [];
+    ejercicios.push(d);
+  });
+  ejercicios.sort(sortEj_);
+
   return {
     nombre: user.nombre,
     fecha: hoy,
     categorias: readTable_('Categorias').map(function (c) { return { id: Number(c.id), nombre: c.nombre }; }),
-    ejercicios: asignaciones.map(function (a) {
-      var ej = catalogo[a.ejercicioId];
-      return {
-        asignacionId: a.id,
-        ejercicioId: a.ejercicioId,
-        categoria: Number(ej.categoria),
-        nombre: ej.nombre,
-        video: ej.video || '',
-        cantidad: Number(a.cantidad),
-        unidad: a.unidad,
-        series: Number(a.series),
-        variante: a.variante || '',
-        orden: Number(a.orden) || 0,
-        hechas: hechas[a.id] || []
-      };
-    }).sort(function (x, y) { return x.categoria - y.categoria || x.orden - y.orden; })
+    ejercicios: ejercicios
   };
 }
 
@@ -165,7 +242,7 @@ function logSet_(codigo, asignacionId, serie) {
     return r.asignacionId === asignacionId && fmtDate_(r.fecha) === hoy && Number(r.serie) === serie;
   });
   if (!ya) {
-    sheet_('Registro').appendRow([hoy, normCode_(codigo), asignacionId, a.ejercicioId, serie, new Date()]);
+    sheet_('Registro').appendRow([hoy, normCode_(codigo), asignacionId, normId_(a.ejercicioId), serie, new Date()]);
   }
   return true;
 }
@@ -196,18 +273,15 @@ function findAssignmentFor_(codigo, asignacionId) {
 function adminData_() {
   return {
     categorias: readTable_('Categorias').map(function (c) { return { id: Number(c.id), nombre: c.nombre }; }),
-    variantes: readTable_('Variantes').map(function (v) { return v.nombre; }).filter(String),
     unidades: UNIDADES,
-    catalogo: readTable_('Catalogo').filter(function (e) { return isActive_(e.activo); }).map(function (e) {
-      return { id: e.id, categoria: Number(e.categoria), nombre: e.nombre, video: e.video || '' };
-    }),
+    catalogo: readCatalog_().sort(sortEj_),
     usuarios: readTable_('Usuarios').filter(function (u) { return isActive_(u.activo); }).map(function (u) {
       return { codigo: u.codigo, nombre: u.nombre };
     }),
     asignaciones: readTable_('Asignaciones').filter(function (a) { return isActive_(a.activo); }).map(function (a) {
       return {
-        id: a.id, codigo: a.codigo, ejercicioId: a.ejercicioId, cantidad: Number(a.cantidad),
-        unidad: a.unidad, series: Number(a.series), variante: a.variante, orden: Number(a.orden) || 0
+        id: a.id, codigo: a.codigo, ejercicioId: normId_(a.ejercicioId), cantidad: Number(a.cantidad),
+        unidad: a.unidad, series: Number(a.series), orden: Number(a.orden) || 0
       };
     })
   };
@@ -223,54 +297,35 @@ function addUser_(nombre) {
   return { codigo: codigo, nombre: nombre };
 }
 
-function addExercise_(categoria, nombre, video) {
-  categoria = Number(categoria);
-  nombre = String(nombre || '').trim();
-  if (!(categoria >= 1 && categoria <= NUM_CATEGORIAS)) throw new Error('Categoría no válida');
-  if (!nombre) throw new Error('Falta el nombre del ejercicio');
-  // ID: número de categoría + "-" + correlativo de 3 cifras. Ej: 3-007.
-  // Solo dígitos y guion: no depende de mayúsculas/minúsculas.
-  var max = 0;
-  readTable_('Catalogo').forEach(function (e) {
-    var p = String(e.id).split('-');
-    if (Number(p[0]) === categoria) max = Math.max(max, Number(p[1]) || 0);
-  });
-  var id = categoria + '-' + ('00' + (max + 1)).slice(-3);
-  sheet_('Catalogo').appendRow([id, categoria, nombre, String(video || '').trim(), true]);
-  return { id: id, categoria: categoria, nombre: nombre, video: video || '' };
+function validateDose_(r) {
+  if (UNIDADES.indexOf(r.unidad) < 0) throw new Error('Unidad no válida');
+  var cantidad = Number(r.cantidad), series = Number(r.series);
+  if (!(cantidad > 0) || !(series >= 1 && series <= 20)) throw new Error('Cantidad o series no válidas');
+  return { cantidad: cantidad, series: series };
 }
 
 function addAssignment_(r) {
   var codigo = normCode_(r.codigo);
+  var ejercicioId = normId_(r.ejercicioId);
   if (!readTable_('Usuarios').some(function (u) { return normCode_(u.codigo) === codigo; })) throw new Error('Usuario no encontrado');
-  if (!readTable_('Catalogo').some(function (e) { return e.id === r.ejercicioId; })) throw new Error('Ejercicio no encontrado');
-  if (UNIDADES.indexOf(r.unidad) < 0) throw new Error('Unidad no válida');
-  var cantidad = Number(r.cantidad), series = Number(r.series);
-  if (!(cantidad > 0) || !(series >= 1 && series <= 20)) throw new Error('Cantidad o series no válidas');
+  if (!readCatalog_().some(function (e) { return e.id === ejercicioId; })) throw new Error('Ejercicio no encontrado');
+  var d = validateDose_(r);
   var orden = readTable_('Asignaciones').filter(function (a) { return normCode_(a.codigo) === codigo; }).length + 1;
   var id = 'A' + Date.now().toString(36).toUpperCase() + randomCode_(3);
-  sheet_('Asignaciones').appendRow([id, codigo, r.ejercicioId, cantidad, r.unidad, series, r.variante || '', orden, true]);
+  sheet_('Asignaciones').appendRow([id, codigo, ejercicioId, d.cantidad, r.unidad, d.series, orden, true]);
   return { id: id };
 }
 
-function updateExercise_(id, nombre, video) {
-  nombre = String(nombre || '').trim();
-  if (!nombre) throw new Error('Falta el nombre del ejercicio');
-  // La categoría no se cambia: el ID empieza por ella. Para moverlo, se crea uno nuevo.
-  return updateRow_('Catalogo', 'id', id, { nombre: nombre, video: String(video || '').trim() });
-}
-
-function removeExercise_(id) {
-  var enUso = readTable_('Asignaciones').some(function (a) { return a.ejercicioId === id && isActive_(a.activo); });
-  if (enUso) throw new Error('Está asignado a algún usuario. Quítalo de sus planes antes de eliminarlo.');
-  return updateRow_('Catalogo', 'id', id, { activo: false });
-}
-
 function updateAssignment_(r) {
-  if (UNIDADES.indexOf(r.unidad) < 0) throw new Error('Unidad no válida');
-  var cantidad = Number(r.cantidad), series = Number(r.series);
-  if (!(cantidad > 0) || !(series >= 1 && series <= 20)) throw new Error('Cantidad o series no válidas');
-  return updateRow_('Asignaciones', 'id', r.id, { cantidad: cantidad, unidad: r.unidad, series: series, variante: r.variante || '' });
+  var d = validateDose_(r);
+  var cambios = { cantidad: d.cantidad, unidad: r.unidad, series: d.series };
+  if (r.ejercicioId) {
+    // Permite cambiar de variante (4E → 4E2) sin quitar y volver a asignar.
+    var nuevo = normId_(r.ejercicioId);
+    if (!readCatalog_().some(function (e) { return e.id === nuevo; })) throw new Error('Ejercicio no encontrado');
+    cambios.ejercicioId = nuevo;
+  }
+  return updateRow_('Asignaciones', 'id', r.id, cambios);
 }
 
 /* ------------------------------------------------------------------ */
@@ -299,7 +354,7 @@ function updateRow_(name, keyCol, keyVal, cambios) {
   var head = values[0];
   var k = head.indexOf(keyCol);
   for (var i = 1; i < values.length; i++) {
-    if (String(values[i][k]) === String(keyVal)) {
+    if (String(values[i][k]).toUpperCase() === String(keyVal).toUpperCase()) {
       Object.keys(cambios || {}).forEach(function (col) {
         var c = head.indexOf(col);
         if (c >= 0 && col !== keyCol) sh.getRange(i + 1, c + 1).setValue(cambios[col]);
@@ -310,10 +365,14 @@ function updateRow_(name, keyCol, keyVal, cambios) {
   throw new Error('No encontrado: ' + keyVal);
 }
 
-function indexBy_(arr, key) {
+function indexById_(arr) {
   var o = {};
-  arr.forEach(function (x) { if (isActive_(x.activo)) o[x[key]] = x; });
+  arr.forEach(function (x) { o[x.id] = x; });
   return o;
+}
+
+function sortEj_(a, b) {
+  return a.categoria - b.categoria || (a.letra < b.letra ? -1 : a.letra > b.letra ? 1 : 0) || a.variante - b.variante;
 }
 
 function requireAdmin_(key) {
@@ -329,6 +388,7 @@ function withLock_(fn) {
 
 function isActive_(v) { return v === '' || v === true || String(v).toUpperCase() === 'TRUE'; }
 function normCode_(c) { return String(c || '').trim().toUpperCase(); }
+function normId_(c) { return String(c || '').trim().toUpperCase(); }
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function fmtDate_(v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v); }
 

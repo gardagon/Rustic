@@ -3,7 +3,7 @@
 Plan de ejercicios por usuario, con la Google Sheet como base de datos. Web app instalable en el móvil (PWA).
 
 - **Usuario:** entra con su código, ve sus ejercicios en 9 categorías y marca cada serie que hace.
-- **Administrador:** crea usuarios, añade ejercicios al catálogo y los asigna (la categoría filtra los ejercicios).
+- **Administrador:** crea usuarios, pone nombre y vídeo a los ejercicios (de `1A` a `9Z`), les añade variantes (`4E1`, `4E2`…) y los asigna.
 
 La app arranca en **modo demo** (sin backend): código `DEMO`, clave de administrador `admin`.
 
@@ -34,7 +34,7 @@ Abre la URL en el móvil y añádela a la pantalla de inicio:
    - Quién tiene acceso: **Cualquier usuario**
 6. Copia la URL que termina en `/exec` y pégala en `web/config.js` como `API_URL`. Haz push.
 
-Desde ese momento la app usa la hoja real. Entra como administrador, crea los usuarios, el catálogo y las asignaciones.
+Desde ese momento la app usa la hoja real. Entra como administrador, pon nombre a los ejercicios que lo necesiten, crea los usuarios y asígnales ejercicios.
 
 > Cada vez que cambie `Code.gs`, hay que pegarlo de nuevo y en **Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva versión**. La URL no cambia.
 

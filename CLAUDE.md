@@ -18,7 +18,7 @@ web/            PWA estática (HTML + CSS + JS, sin build). Se publica en GitHub
   config.js     API_URL del backend. Vacía = modo demo (datos en localStorage, clave admin "admin", código "DEMO").
   api.js        Capa de datos. Implementa las mismas acciones en remoto y en demo: si añades una acción, añádela en los dos sitios.
   app.js        Interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
-                #/admin/ej/ID (editar ejercicio) , #/admin/a/ID (editar asignación)
+                #/admin/ej/ID (editar ejercicio o variante) , #/admin/a/ID (editar asignación)
   sw.js         Service worker "red primero": los cambios se ven al recargar.
 apps-script/
   Code.gs       Backend en Google Apps Script vinculado a la Google Sheet (la base de datos).
@@ -30,18 +30,20 @@ apps-script/
 | Pestaña | Columnas |
 |---|---|
 | Categorias | id (1–9), nombre |
-| Variantes | nombre |
-| Catalogo | id, categoria, nombre, video, activo |
+| Catalogo | id, categoria, letra, variante, nombre, video, activo |
 | Usuarios | codigo, nombre, activo |
-| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, variante, orden, activo |
+| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, orden, activo |
 | Registro | fecha (yyyy-MM-dd, Europe/Madrid), codigo, asignacionId, ejercicioId, serie, timestamp |
 
 Decisiones tomadas:
 - Tablas comunes, no una pestaña por usuario: permite histórico y un único catálogo. La comodidad del responsable se resuelve con el modo administrador de la app.
-- IDs de ejercicio `{categoria}-{nnn}` (ej. `3-007`), generados automáticamente. Sin depender de mayúsculas/minúsculas, porque Sheets no las distingue en búsquedas.
+- Nomenclatura del entrenador: ejercicio base = categoría + letra (`4E`, de `1A` a `9Z`); variante = base + número (`4E1`, `4E2`). setup() crea los 234 ejercicios base sin nombre; las variantes las añade el administrador.
+- El nombre puede quedar vacío a propósito: p. ej. A, B y C cambian cada clase y los explica el entrenador. En pantalla se muestra solo el ID.
+- Cada variante tiene su nombre y su vídeo; si no tiene vídeo, usa el del ejercicio base. Una asignación apunta a un base (`4E`) o a una variante (`4E1`).
+- Los números de variante eliminada no se reutilizan, para que el histórico no se mezcle.
 - Códigos de usuario aleatorios de 6 caracteres sin 0/O/1/I.
 - Borrado lógico (`activo = FALSE`), nunca se borran filas salvo en Registro al desmarcar una serie.
-- Un ejercicio del catálogo no cambia de categoría (va en su ID) y no se puede eliminar mientras esté asignado.
+- Los ejercicios base no se eliminan (son fijos, A–Z). Una variante no se puede eliminar mientras esté asignada.
 - Vídeos de YouTube como "ocultos" (no "privados": los privados no se reproducen para otros).
 
 ## Flujo de trabajo
@@ -59,6 +61,5 @@ Decisiones tomadas:
 ## Pendiente / ideas
 
 - Nombres reales de las 9 categorías (se editan desde Administración → Ejercicios → Renombrar).
-- Valores reales de "variante" (pestaña Variantes).
 - Vista de histórico por días (los datos ya se guardan en Registro).
 - Reordenar ejercicios dentro de una categoría.
