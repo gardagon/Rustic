@@ -61,6 +61,16 @@ Decisiones tomadas:
 
 ## Flujo de trabajo
 
+**Reglas para cada sesión:**
+1. Antes de cambiar nada, `git pull`. Al terminar, ejecuta `./tests/run.sh`; si falla, arréglalo antes de subir.
+2. Si añades o cambias comportamiento del backend, añade su prueba en `tests/`. Si cambias una acción, cámbiala
+   también en el modo demo (`web/api.js`).
+3. Trabaja directamente sobre `main` y haz push al terminar (proyecto de una sola persona; no hace falta rama ni PR),
+   salvo que te pida otra cosa.
+4. Después del push, comprueba que se publicó (ver más abajo) y dime en 2–3 pasos cómo probarlo en el móvil.
+5. Las pruebas en navegador (Playwright) se hacen con `API_URL` vacía en `web/config.js` (modo demo), y se restaura
+   después. Nunca subas `config.js` con la URL vacía.
+
 - Cambios en `web/` → commit y push a `main` → GitHub Pages publica en ~1 minuto → recargar en el móvil.
 - Cambios en `apps-script/Code.gs` → push a `main` → el flujo "Publicar backend" lo sube a Apps Script, crea una
   versión y la pone en la implementación (misma URL). Datos en `apps-script/deploy.json`; lógica en

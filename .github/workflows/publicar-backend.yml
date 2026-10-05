@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Pruebas (si fallan, no se publica)
+        run: ./tests/run.sh
+
       - name: Publicar en Apps Script
         env:
           KEY: ${{ secrets.GOOGLE_AUTH }}
