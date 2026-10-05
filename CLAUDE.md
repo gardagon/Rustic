@@ -62,7 +62,11 @@ Decisiones tomadas:
 ## Flujo de trabajo
 
 - Cambios en `web/` → commit y push a `main` → GitHub Pages publica en ~1 minuto → recargar en el móvil.
-- Cambios en `apps-script/Code.gs` NO se despliegan solos: hay que copiarlo al editor de Apps Script e ir a Implementar → Gestionar implementaciones → editar → Nueva versión. Avísame siempre que un cambio lo requiera.
+- Cambios en `apps-script/Code.gs` → push a `main` → el flujo "Publicar backend" lo sube a Apps Script, crea una
+  versión y la pone en la implementación (misma URL). Datos en `apps-script/deploy.json`; lógica en
+  `.github/scripts/google.mjs`. La credencial de Google está cifrada en `.github/google-token.enc` y la clave es el
+  secreto `GOOGLE_AUTH` del repositorio. Si ese flujo falla, el resultado está en la pestaña Actions de GitHub.
+- Si un cambio de Code.gs altera el esquema de la hoja, sube `SCHEMA_VERSION`: se migra sola al publicar.
 - Sin dependencias ni paso de build. Mantenerlo así salvo que haya un motivo claro.
 - Probar en local: `cd web && python3 -m http.server 8000`.
 

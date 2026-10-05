@@ -40,6 +40,17 @@ Desde ese momento la app usa la hoja real. Entra como administrador, pon nombre 
 >
 > Si el cambio afecta a las pestañas de la hoja, no hace falta hacer nada más: la primera petición tras publicar pone la hoja al día sola (añade lo que falta y migra datos, nunca borra).
 
+### 4 bis. Publicación automática del backend (opcional, recomendado)
+Una vez hecho, cada cambio en `apps-script/Code.gs` se publica solo al llegar a `main`.
+1. Activa la "API de Google Apps Script" en https://script.google.com/home/usersettings
+2. Pon el ID del script y el de la implementación en `apps-script/deploy.json`.
+3. Abre el enlace de autorización (`node .github/scripts/google.mjs url`), acepta con la cuenta dueña de la hoja y
+   copia la dirección completa a la que te lleva (empieza por `http://localhost/?code=`; la página dará error, es normal).
+4. En GitHub: Settings → Secrets and variables → Actions → New repository secret. Nombre `GOOGLE_AUTH`, valor: esa dirección.
+5. Ejecuta el flujo "Conectar con Google" (pestaña Actions) en los minutos siguientes: el código caduca pronto.
+
+Para revocar el acceso: https://myaccount.google.com/permissions → clasp → Quitar acceso.
+
 ### 5. Trabajar desde el móvil
 Con el repositorio conectado a Claude, pide cambios desde la app del móvil sobre `rustic`. Cuando lleguen a `main`, se publican solos: recarga la app y pruébalos.
 

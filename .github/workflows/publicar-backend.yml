@@ -1,0 +1,41 @@
+# Publica apps-script/Code.gs en Google Apps Script cada vez que cambia en main:
+# sube el código, crea una versión nueva y la pone en la implementación (la URL no cambia).
+name: Publicar backend
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/Code.gs', 'apps-script/deploy.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publicar en Apps Script
+        env:
+          KEY: ${{ secrets.GOOGLE_AUTH }}
+          DESCRIPCION: ${{ github.event.head_commit.message || 'Publicado desde GitHub' }}
+        run: |
+          if [ ! -f .github/google-token.enc ] || [ -z "$KEY" ]; then
+            echo "::notice::Aún no está conectado con Google: el backend no se ha publicado. Ver README → Publicación automática."
+            exit 0
+          fi
+          REFRESH_TOKEN="$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -a -A -pass env:KEY -in .github/google-token.enc)" || {
+            echo "::error::No se puede descifrar la credencial. Si cambiaste el secreto GOOGLE_AUTH, vuelve a conectar."; exit 1; }
+          echo "::add-mask::$REFRESH_TOKEN"
+          export REFRESH_TOKEN
+          export DESCRIPCION="$(printf '%s' "$DESCRIPCION" | head -1)"
+          node .github/scripts/google.mjs publicar

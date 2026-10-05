@@ -1,0 +1,1 @@
+Cambia este archivo (o ejecuta el flujo "Conectar con Google" a mano) para canjear el secreto GOOGLE_AUTH.

@@ -1,0 +1,59 @@
+# Se usa UNA vez (o si se revoca el acceso): canjea la autorización de Google guardada en el
+# secreto GOOGLE_AUTH por una credencial permanente, la guarda CIFRADA en el repositorio
+# (la clave es el propio secreto) y publica el backend.
+name: Conectar con Google
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/conectar-google.txt']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apps-script
+  cancel-in-progress: false
+
+jobs:
+  conectar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Canjear la autorización de Google
+        env:
+          GOOGLE_AUTH: ${{ secrets.GOOGLE_AUTH }}
+          TOKEN_FILE: ${{ runner.temp }}/rt
+        run: |
+          if [ -z "$GOOGLE_AUTH" ]; then
+            echo "::error::Falta el secreto GOOGLE_AUTH (Settings → Secrets and variables → Actions)."; exit 1
+          fi
+          node .github/scripts/google.mjs canjear
+          echo "::add-mask::$(cat "$TOKEN_FILE")"
+
+      - name: Guardar la credencial cifrada
+        env:
+          KEY: ${{ secrets.GOOGLE_AUTH }}
+        run: |
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -a -A -pass env:KEY \
+            -in "${{ runner.temp }}/rt" -out .github/google-token.enc
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/google-token.enc
+          git commit -m "Credencial de Google (cifrada) para publicar el backend"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Publicar el backend
+        env:
+          TOKEN_FILE: ${{ runner.temp }}/rt
+          DESCRIPCION: Primera publicación automática
+        run: |
+          export REFRESH_TOKEN="$(cat "$TOKEN_FILE")"
+          node .github/scripts/google.mjs publicar
+          rm -f "$TOKEN_FILE"

@@ -159,7 +159,9 @@ function migrarAPlanes_() {
 /* ------------------------------------------------------------------ */
 
 function doGet() {
-  return json_({ ok: true, app: 'rustic', mensaje: 'Backend activo' });
+  // La comprobación tras cada publicación automática entra por aquí: así la hoja se pone al día en ese momento.
+  ensureSchema_();
+  return json_({ ok: true, app: 'rustic', mensaje: 'Backend activo', esquema: SCHEMA_VERSION });
 }
 
 function doPost(e) {
