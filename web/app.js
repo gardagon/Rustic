@@ -1,5 +1,6 @@
 // Rustic — interfaz. Rutas por hash: #/ , #/plan , #/historial , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
-// #/admin/ej/ID , #/admin/a/ID , #/admin/np/CODIGO (nueva planificación) , #/admin/h/CODIGO (histórico)
+// #/admin/ej/ID , #/admin/a/ID , #/admin/np/CODIGO (nueva planificación) , #/admin/p/ID (editar planificación) ,
+// #/admin/h/CODIGO (histórico)
 (function () {
   const api = window.RusticAPI;
   const $app = document.getElementById('app');
@@ -28,6 +29,33 @@
     const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
     return t.charAt(0).toUpperCase() + t.slice(1);
   };
+  const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
+  // "del 5 oct al 30 nov" · "desde 5 oct, sin fecha de fin"
+  const rango = p => (p.fin ? `del ${fechaMedia(p.inicio)} al ${fechaMedia(p.fin)}` : `desde ${fechaMedia(p.inicio)}, sin fecha de fin`);
+  // Planificaciones: de inicio a fin (fin vacío = sin fecha de fin). La que edita el administrador
+  // es la más reciente que no ha terminado (puede empezar más adelante). Igual que currentPlan_ en Code.gs.
+  const planEditable = (planes, codigo) => {
+    const hoy = hoyISO();
+    return (planes || []).map((p, n) => ({ p, n })).filter(x => x.p.codigo === codigo && !(x.p.fin && x.p.fin < hoy))
+      .sort((a, b) => (a.p.inicio < b.p.inicio ? 1 : a.p.inicio > b.p.inicio ? -1 : b.n - a.n)).map(x => x.p)[0];
+  };
+  // Campos de fechas con el tic "sin fecha de fin".
+  const fechasFields = (inicio, fin, minInicio) => `
+    <div class="grid-2">
+      <div><label for="pi">Inicio</label><input id="pi" type="date" value="${esc(inicio)}" ${minInicio ? `min="${esc(minInicio)}"` : ''} required></div>
+      <div><label for="pf">Fin</label><input id="pf" type="date" value="${esc(fin)}" min="${esc(inicio)}" ${fin ? 'required' : 'disabled'}></div>
+    </div>
+    <label class="check"><input type="checkbox" id="psf" ${fin ? '' : 'checked'}><span>Sin fecha de fin</span></label>`;
+  function wireFechas(defaultFin) {
+    const pi = document.getElementById('pi'), pf = document.getElementById('pf'), sf = document.getElementById('psf');
+    const sync = () => {
+      pf.disabled = sf.checked; pf.required = !sf.checked; pf.min = pi.value;
+      if (!sf.checked && !pf.value) pf.value = defaultFin(pi.value);
+    };
+    sf.onchange = sync; pi.onchange = sync;
+    return () => ({ inicio: pi.value, fin: sf.checked ? '' : pf.value });
+  }
+  const masDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
   const fechaLarga = iso => {
     const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -143,14 +171,15 @@
         <div>
           <h1>Hola, ${esc(plan.nombre)}</h1>
           <p class="muted">${esc(fechaLarga(plan.fecha))}</p>
-          ${plan.plan ? `<p class="plan-name">${esc(plan.plan.nombre)} · desde ${esc(fechaMedia(plan.plan.inicio))}</p>` : ''}
+          ${plan.plan ? `<p class="plan-name">${esc(plan.plan.nombre)} · ${esc(plan.plan.fin ? rango(plan.plan) : 'desde ' + fechaMedia(plan.plan.inicio))}</p>` : ''}
         </div>
         <button class="btn-link" id="logout">Salir</button>
       </header>
       ${total ? `<div class="progress" style="margin-bottom:20px">
         <div class="progress-bar"><div style="width:${pct}%"></div></div>
         <p class="progress-label">${done} de ${total} series hechas hoy</p></div>` : ''}
-      ${cats || '<div class="card empty">Todavía no tienes ejercicios asignados.</div>'}
+      ${cats || `<div class="card empty">${plan.proxima ? `Tu próxima planificación empieza el ${esc(fechaMedia(plan.proxima.inicio))}.`
+        : 'Todavía no tienes ejercicios asignados.'}</div>`}
       ${plan.ejercicios.some(e => e.x2) ? `<p class="legend">${X2_HELP}</p>` : ''}
       ${'plan' in plan ? '<button class="btn-ghost btn-block" id="hist" style="margin-top:20px">Ver mi histórico</button>' : ''}`;
 
@@ -325,8 +354,11 @@
     const db = adminDb;
     const u = db.usuarios.find(x => x.codigo === codigo);
     if (!u) return go('#/admin');
-    const vig = (db.planes || []).filter(p => p.codigo === codigo && !p.fin).sort((a, b) => (a.inicio < b.inicio ? 1 : -1))[0];
-    const asig = db.asignaciones.filter(a => a.codigo === codigo)
+    const vig = planEditable(db.planes, codigo);
+    const hoy = hoyISO();
+    const ultima = (db.planes || []).filter(p => p.codigo === codigo).sort((a, b) => (a.inicio < b.inicio ? 1 : -1))[0];
+    // Solo los ejercicios de la planificación que se edita (puede haber otra en curso hasta que empiece).
+    const asig = db.asignaciones.filter(a => a.codigo === codigo && (!vig || !a.planId || a.planId === vig.id))
       .map(a => ({ a, e: byId(a.ejercicioId) }))
       .sort((x, y) => (x.e && y.e ? x.e.categoria - y.e.categoria || letraIdx(x.e.letra) - letraIdx(y.e.letra) || x.e.variante - y.e.variante : 0));
 
@@ -336,10 +368,11 @@
         <button class="btn-link" id="back">Volver</button>
       </header>
       ${!db.planes ? '' : `<div class="card plan-card">
-        ${vig ? `<button class="plan-title" id="rename-plan" aria-label="Renombrar planificación">
-            <span><strong>${esc(vig.nombre)}</strong><br><span class="muted small">Vigente desde ${esc(fechaMedia(vig.inicio))}</span></span>
-            <span class="edit-hint">Renombrar</span></button>`
-          : '<p class="muted">Sin planificación. Se crea sola al asignar el primer ejercicio.</p>'}
+        ${vig ? `<button class="plan-title" id="edit-plan" aria-label="Editar planificación">
+            <span><strong>${esc(vig.nombre)}</strong><br><span class="muted small">${vig.inicio > hoy ? 'Empieza el ' + esc(fechaMedia(vig.inicio)) + ' · ' : ''}${esc(rango(vig))}</span></span>
+            <span class="edit-hint">Editar</span></button>`
+          : `<p class="muted">${ultima && ultima.fin ? `«${esc(ultima.nombre)}» terminó el ${esc(fechaMedia(ultima.fin))}. Crea una nueva planificación.`
+            : 'Sin planificación. Se crea sola (desde hoy, sin fecha de fin) al asignar el primer ejercicio.'}</p>`}
         <div class="grid-2" style="margin-top:12px">
           <button class="btn-ghost" id="new-plan">Nueva planificación</button>
           <button class="btn-ghost" id="hist">Histórico</button>
@@ -373,13 +406,8 @@
       document.getElementById('new-plan').onclick = () => go('#/admin/np/' + encodeURIComponent(codigo));
       document.getElementById('hist').onclick = () => go('#/admin/h/' + encodeURIComponent(codigo));
     }
-    const rp = document.getElementById('rename-plan');
-    if (rp) rp.onclick = async () => {
-      const nombre = prompt('Nombre de la planificación', vig.nombre);
-      if (!nombre || !nombre.trim()) return;
-      try { await api.call('renamePlan', { key: adminKey(), id: vig.id, nombre: nombre.trim() }); await loadAdmin(true); showAdminUser(codigo); }
-      catch (e) { toast(e.message); }
-    };
+    const ep = document.getElementById('edit-plan');
+    if (ep) ep.onclick = () => go('#/admin/p/' + encodeURIComponent(vig.id));
     const ac = document.getElementById('ac'), ae = document.getElementById('ae');
     const av = document.getElementById('av'), avWrap = document.getElementById('av-wrap');
     // La categoría "libera" los ejercicios, y el ejercicio sus variantes.
@@ -546,8 +574,12 @@
     try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
     const u = adminDb.usuarios.find(x => x.codigo === codigo);
     if (!u) return go('#/admin');
-    const n = adminDb.asignaciones.filter(a => a.codigo === codigo).length;
-    const hoy = new Date().toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const actual = planEditable(adminDb.planes, codigo);
+    const n = adminDb.asignaciones.filter(a => a.codigo === codigo && (!actual || !a.planId || a.planId === actual.id)).length;
+    const hoyIso = hoyISO();
+    // No puede empezar antes de hoy ni antes que la actual.
+    const minInicio = actual && actual.inicio > hoyIso ? actual.inicio : hoyIso;
+    const hoy = minInicio.split('-').reverse().join('/');
     const backTo = '#/admin/u/' + encodeURIComponent(codigo);
     $app.innerHTML = `
       <header class="top">
@@ -556,19 +588,51 @@
       </header>
       <form id="f" class="card stack">
         <div><label for="pn">Nombre (opcional)</label><input id="pn" placeholder="Planificación ${esc(hoy)}"></div>
+        ${fechasFields(minInicio, masDias(minInicio, 27), minInicio)}
         ${n ? `<label class="check"><input type="checkbox" id="cp" checked>
           <span>Empezar con los ${n} ejercicios de la actual, para cambiar solo lo necesario</span></label>` : ''}
-        <p class="muted small">${n ? 'La planificación actual se cierra hoy y pasa al histórico tal como está.' : 'Empezará vacía.'}
-          ${esc(u.nombre)} verá la nueva al entrar.</p>
+        <p class="muted small">${actual ? `Si «${esc(actual.nombre)}» sigue abierta en esa fecha, termina el día antes y pasa al histórico tal como está. ` : ''}${n ? '' : 'Empezará vacía. '}
+          ${esc(u.nombre)} verá la nueva a partir de la fecha de inicio.</p>
         <button class="btn-block">Crear planificación</button>
       </form>`;
     document.getElementById('back').onclick = () => go(backTo);
+    const fechas = wireFechas(ini => masDias(ini, 27)); // propuesta: 4 semanas
     document.getElementById('f').onsubmit = async ev => {
       ev.preventDefault();
       const cp = document.getElementById('cp');
       try {
-        const p = await api.call('newPlan', { key: adminKey(), codigo, nombre: document.getElementById('pn').value, copiar: cp ? cp.checked : false });
+        const p = await api.call('newPlan', { key: adminKey(), codigo, nombre: document.getElementById('pn').value, copiar: cp ? cp.checked : false, ...fechas() });
         await loadAdmin(true); toast(`Creada: ${p.nombre}`); go(backTo);
+      } catch (err) { toast(err.message); }
+    };
+  }
+
+  /* ---------- editar planificación: nombre y fechas ---------- */
+  async function showEditPlan(id) {
+    if (!adminKey()) return renderAdminLogin();
+    loading();
+    try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
+    const p = (adminDb.planes || []).find(x => x.id === id);
+    if (!p) return go('#/admin');
+    const u = adminDb.usuarios.find(x => x.codigo === p.codigo);
+    const backTo = '#/admin/u/' + encodeURIComponent(p.codigo);
+    $app.innerHTML = `
+      <header class="top">
+        <div><h1>Planificación</h1><p class="muted">De ${esc(u ? u.nombre : p.codigo)}</p></div>
+        <button class="btn-link" id="back">Volver</button>
+      </header>
+      <form id="f" class="card stack">
+        <div><label for="pn">Nombre</label><input id="pn" value="${esc(p.nombre)}" required></div>
+        ${fechasFields(p.inicio, p.fin, '')}
+        <button class="btn-block">Guardar</button>
+      </form>`;
+    document.getElementById('back').onclick = () => go(backTo);
+    const fechas = wireFechas(ini => { const f = masDias(ini, 27); return f < hoyISO() ? hoyISO() : f; });
+    document.getElementById('f').onsubmit = async ev => {
+      ev.preventDefault();
+      try {
+        await api.call('updatePlan', { key: adminKey(), id, nombre: document.getElementById('pn').value.trim(), ...fechas() });
+        await loadAdmin(true); toast('Guardado'); go(backTo);
       } catch (err) { toast(err.message); }
     };
   }
@@ -583,7 +647,7 @@
         <details class="cat hist-plan" ${i === 0 ? 'open' : ''}>
           <summary>
             <span class="cat-title"><h2>${esc(p.nombre)}</h2>
-              <p>${esc(fechaMedia(p.inicio))} – ${p.fin ? esc(fechaMedia(p.fin)) : 'hoy'} · ${p.dias.length} día${p.dias.length === 1 ? '' : 's'} entrenado${p.dias.length === 1 ? '' : 's'}${p.dias.length ? ` · ${media}% de media` : ''}</p></span>
+              <p>${esc(fechaMedia(p.inicio))} – ${p.fin ? esc(fechaMedia(p.fin)) : 'sin fin'} · ${p.dias.length} día${p.dias.length === 1 ? '' : 's'} entrenado${p.dias.length === 1 ? '' : 's'}${p.dias.length ? ` · ${media}% de media` : ''}</p></span>
             <span class="chev" aria-hidden="true"></span>
           </summary>
           <div class="cat-body">
@@ -649,6 +713,7 @@
     if (h.startsWith('#/admin/ej/')) return showEditExercise(decodeURIComponent(h.slice(11)));
     if (h.startsWith('#/admin/a/')) return showEditAssignment(decodeURIComponent(h.slice(10)));
     if (h.startsWith('#/admin/np/')) return showNewPlan(decodeURIComponent(h.slice(11)));
+    if (h.startsWith('#/admin/p/')) return showEditPlan(decodeURIComponent(h.slice(10)));
     if (h.startsWith('#/admin/h/')) return showAdminHistory(decodeURIComponent(h.slice(10)));
     if (h === '#/historial') return showHistory();
     if (store.get('codigo')) return go('#/plan');

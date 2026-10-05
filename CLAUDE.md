@@ -18,7 +18,9 @@ web/            PWA estática (HTML + CSS + JS, sin build). Se publica en GitHub
   config.js     API_URL del backend. Vacía = modo demo (datos en localStorage, clave admin "admin", código "DEMO").
   api.js        Capa de datos. Implementa las mismas acciones en remoto y en demo: si añades una acción, añádela en los dos sitios.
   app.js        Interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
-                #/admin/ej/ID (editar ejercicio o variante) , #/admin/a/ID (editar asignación)
+                #/admin/ej/ID (editar ejercicio o variante) , #/admin/a/ID (editar asignación) ,
+                #/admin/np/CODIGO (nueva planificación) , #/admin/p/ID (nombre y fechas de la planificación) ,
+                #/admin/h/CODIGO (histórico)
   sw.js         Service worker "red primero": los cambios se ven al recargar.
 apps-script/
   Code.gs       Backend en Google Apps Script vinculado a la Google Sheet (la base de datos).
@@ -32,7 +34,7 @@ apps-script/
 | Categorias | id (1–9), nombre |
 | Catalogo | id, categoria, letra, variante, nombre, video, activo |
 | Usuarios | codigo, nombre, activo |
-| Planes | id, codigo, nombre, inicio, fin (vacío = vigente) |
+| Planes | id, codigo, nombre, inicio, fin (vacío = sin fecha de fin) |
 | Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, x2, orden, activo, planId |
 | Registro | fecha (yyyy-MM-dd, Europe/Madrid), codigo, asignacionId, ejercicioId, serie, timestamp, planId, cantidad, unidad, series, x2 |
 
@@ -42,9 +44,15 @@ crea lo que falta, añade columnas nuevas al final y migra datos antiguos; nunca
 Al cambiar el esquema, sube `SCHEMA_VERSION`. La web debe tolerar el backend anterior hasta que se publique.
 
 Decisiones tomadas:
-- Planificaciones por bloques: el entrenador cambia el plan entero según su criterio. "Nueva planificación" cierra la
-  vigente (fin = hoy) y abre otra desde hoy, opcionalmente copiando sus ejercicios. Solo hay una vigente por usuario.
-  Las cerradas son de solo lectura (histórico). Un ejercicio puede repetirse en planificaciones distintas.
+- Planificaciones por bloques, cada una de inicio a fin; el tic "Sin fecha de fin" deja fin vacío. El usuario ve la
+  que está en curso hoy (inicio ≤ hoy ≤ fin); si se solapan, la de inicio más reciente y, a igual inicio, la creada
+  después (así se leen bien los datos antiguos, donde fin de la anterior = inicio de la nueva). Pasado el fin, el
+  usuario no ve ejercicios hasta que haya otra; si hay una futura, se le avisa de cuándo empieza.
+  "Nueva planificación" pide inicio (≥ hoy y ≥ inicio de la actual) y fin o "sin fin"; si la actual sigue abierta
+  en esa fecha, termina el día antes. Opcionalmente copia sus ejercicios.
+  El administrador edita la más reciente que no ha terminado (puede ser una que empieza más adelante); su nombre y
+  fechas se cambian en #/admin/p/ID, sin solaparse con la anterior ni la siguiente y con fin ≥ hoy.
+  Las terminadas (fin < hoy) son de solo lectura (histórico). Un ejercicio puede repetirse en planificaciones distintas.
 - Cada serie registrada guarda lo prescrito ese día (cantidad, unidad, series, x2, planId): editar después la
   asignación no reescribe el histórico. Registros anteriores sin esa copia usan los valores de la asignación.
 - Tablas comunes, no una pestaña por usuario: permite histórico y un único catálogo. La comodidad del responsable se resuelve con el modo administrador de la app.

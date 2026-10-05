@@ -69,7 +69,7 @@ const np=call('newPlan',{key,codigo:'ANA222',nombre:'Noviembre',copiar:true}).da
 assert(np.copiados===2,'nueva planificación copia los 2 ejercicios activos (no el quitado)');
 planes=call('adminData',{key}).data.planes.filter(p=>p.codigo==='ANA222');
 const vieja=planes.find(p=>p.nombre==='Planificación inicial');
-assert(vieja.fin==='2026-11-01' && planes.find(p=>p.nombre==='Noviembre').fin==='','la anterior se cierra y la nueva queda vigente');
+assert(vieja.fin==='2026-10-31' && planes.find(p=>p.nombre==='Noviembre').fin==='','la anterior termina el día antes y la nueva queda sin fecha de fin');
 let ad=call('adminData',{key}).data;
 assert(ad.asignaciones.filter(a=>a.codigo==='ANA222').every(a=>a.planId===np.id) && ad.asignaciones.filter(a=>a.codigo==='ANA222').length===2,'admin solo ve las asignaciones de la vigente');
 plan=call('getPlan',{codigo:'ANA222'}).data;

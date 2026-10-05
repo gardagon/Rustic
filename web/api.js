@@ -45,7 +45,7 @@
     catalogo.push({ id: '4E2', categoria: 4, letra: 'E', variante: 2, nombre: 'Anilla a la cadera', video: '', activo: true });
     const hoy = today(), inicioVig = addDays(hoy, -6), inicioAnt = addDays(hoy, -34);
     const planes = [
-      { id: 'P0', codigo: 'DEMO', nombre: 'Planificación de prueba anterior', inicio: inicioAnt, fin: inicioVig },
+      { id: 'P0', codigo: 'DEMO', nombre: 'Planificación de prueba anterior', inicio: inicioAnt, fin: addDays(inicioVig, -1) },
       { id: 'P1', codigo: 'DEMO', nombre: 'Planificación ' + fechaCorta(inicioVig), inicio: inicioVig, fin: '' }
     ];
     const a = (id, planId, ej, cantidad, unidad, series, x2 = false) =>
@@ -75,13 +75,28 @@
     if (!UNIDADES.includes(r.unidad)) throw new Error('Unidad no válida');
     if (!(+r.cantidad > 0) || !(+r.series >= 1 && +r.series <= 20)) throw new Error('Cantidad o series no válidas');
   };
+  // Planificaciones: de inicio a fin (fin vacío = sin fecha de fin). Igual que en Code.gs.
+  const terminada = (p, dia) => !!p.fin && p.fin < dia;
+  const enCurso = (p, dia) => p.inicio <= dia && !terminada(p, dia);
+  // La más reciente primero; a igual inicio, la creada después.
+  const planesDe = (db, codigo) => db.planes.map((p, n) => ({ p, n })).filter(x => nid(x.p.codigo) === nid(codigo))
+    .sort((a, b) => (a.p.inicio < b.p.inicio ? 1 : a.p.inicio > b.p.inicio ? -1 : b.n - a.n)).map(x => x.p);
+  const newPlanObj = (codigo, nombre, inicio, fin) => ({ id: 'P' + Date.now().toString(36).toUpperCase() + code(3), codigo: nid(codigo),
+    nombre: String(nombre || '').trim() || 'Planificación ' + fechaCorta(inicio), inicio, fin: fin || '' });
+  // La que edita el administrador: la más reciente que no ha terminado.
   const currentPlan = (db, codigo, crear) => {
-    const p = db.planes.filter(x => nid(x.codigo) === nid(codigo) && !x.fin).sort((a, b) => (a.inicio < b.inicio ? 1 : -1))[0];
+    const p = planesDe(db, codigo).find(x => !terminada(x, today()));
     if (p || !crear) return p || null;
-    const n = { id: 'P' + Date.now().toString(36).toUpperCase() + code(3), codigo: nid(codigo), nombre: 'Planificación ' + fechaCorta(today()), inicio: today(), fin: '' };
+    const n = newPlanObj(codigo, '', today(), '');
     db.planes.push(n); return n;
   };
-  const vigentes = db => new Set(db.planes.filter(p => !p.fin).map(p => p.id));
+  const vigentes = db => new Set(db.planes.filter(p => !terminada(p, today())).map(p => p.id));
+  const isoOk = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s)) && !isNaN(Date.parse(s + 'T00:00:00Z'));
+  const checkFechas = (inicio, fin) => {
+    if (!isoOk(inicio)) throw new Error('Fecha de inicio no válida');
+    if (fin && !isoOk(fin)) throw new Error('Fecha de fin no válida');
+    if (fin && fin < inicio) throw new Error('La fecha de fin no puede ser anterior a la de inicio');
+  };
   const notInPlan = (db, planId, ejercicioId, exceptId) => {
     if (db.asignaciones.some(a => a.id !== exceptId && a.activo && a.planId === planId && a.ejercicioId === ejercicioId))
       throw new Error(ejercicioId + ' ya está en este plan. Edítalo en lugar de añadirlo otra vez.');
@@ -99,7 +114,7 @@
   }
   function history(db, codigo) {
     const c = nid(codigo);
-    return db.planes.filter(p => nid(p.codigo) === c).sort((a, b) => (a.inicio < b.inicio ? 1 : -1)).map(p => {
+    return planesDe(db, c).map(p => {
       const ejercicios = db.asignaciones.filter(a => a.planId === p.id && a.activo).map(a =>
         ({ ...(describe(a.ejercicioId, db, true) || { ejercicioId: a.ejercicioId }), cantidad: a.cantidad, unidad: a.unidad, series: a.series, x2: !!a.x2 })).sort(sortEj);
       const dias = {};
@@ -123,10 +138,12 @@
       const db = load(), c = nid(codigo);
       const user = db.usuarios.find(u => nid(u.codigo) === c);
       if (!user) throw new Error('Código no válido (prueba con DEMO)');
-      const hoy = today(), plan = currentPlan(db, c, false);
+      const hoy = today(), planes = planesDe(db, c), plan = planes.find(p => enCurso(p, hoy));
+      const proxima = planes.filter(p => p.inicio > hoy).pop();
       return {
         nombre: user.nombre, fecha: hoy, categorias: db.categorias,
-        plan: plan ? { id: plan.id, nombre: plan.nombre, inicio: plan.inicio } : null,
+        plan: plan ? { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, fin: plan.fin } : null,
+        proxima: proxima ? { nombre: proxima.nombre, inicio: proxima.inicio, fin: proxima.fin } : null,
         ejercicios: !plan ? [] : db.asignaciones.filter(a => a.planId === plan.id && a.activo).map(a => {
           const d = describe(a.ejercicioId, db);
           if (!d) return null;
@@ -213,18 +230,39 @@
       admin(key); const db = load(), a = db.asignaciones.find(x => x.id === id);
       if (a) a.activo = false; save(db); return true;
     },
-    newPlan({ key, codigo, nombre, copiar }) {
+    newPlan({ key, codigo, nombre, copiar, inicio, fin }) {
       admin(key); const db = load(), hoy = today();
+      if (!db.usuarios.some(u => nid(u.codigo) === nid(codigo))) throw new Error('Usuario no encontrado');
+      inicio = String(inicio || hoy).trim(); fin = String(fin || '').trim();
+      checkFechas(inicio, fin);
+      if (inicio < hoy) throw new Error('La fecha de inicio no puede ser anterior a hoy');
       const anterior = currentPlan(db, codigo, false);
-      if (anterior) anterior.fin = hoy;
-      const plan = { id: 'P' + Date.now().toString(36).toUpperCase() + code(3), codigo: nid(codigo),
-        nombre: String(nombre || '').trim() || 'Planificación ' + fechaCorta(hoy), inicio: hoy, fin: '' };
+      if (anterior && inicio < anterior.inicio) throw new Error(`No puede empezar antes que «${anterior.nombre}» (${fechaCorta(anterior.inicio)})`);
+      if (anterior && (!anterior.fin || anterior.fin >= inicio)) {
+        const f = addDays(inicio, -1); anterior.fin = f < anterior.inicio ? anterior.inicio : f;
+      }
+      const plan = newPlanObj(codigo, nombre, inicio, fin);
       db.planes.push(plan);
       let copiados = 0;
       if (anterior && copiar) db.asignaciones.filter(a => a.planId === anterior.id && a.activo).forEach(a => {
         db.asignaciones.push({ ...a, id: 'A' + Date.now().toString(36).toUpperCase() + code(3), planId: plan.id }); copiados++;
       });
-      save(db); return { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, copiados };
+      save(db); return { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, fin: plan.fin, copiados };
+    },
+    updatePlan({ key, id, nombre, inicio, fin }) {
+      admin(key); const db = load(), hoy = today(), p = db.planes.find(x => x.id === id);
+      if (!p) throw new Error('No encontrado: ' + id);
+      if (terminada(p, hoy)) throw new Error('Esta planificación ya terminó: es de solo lectura');
+      nombre = nombre == null ? p.nombre : String(nombre).trim();
+      if (!nombre) throw new Error('Falta el nombre');
+      inicio = inicio == null ? p.inicio : String(inicio).trim();
+      fin = fin == null ? p.fin : String(fin).trim();
+      checkFechas(inicio, fin);
+      if (fin && fin < hoy) throw new Error('La fecha de fin no puede ser anterior a hoy');
+      const lista = planesDe(db, p.codigo), i = lista.indexOf(p), siguiente = lista[i - 1], previa = lista[i + 1];
+      if (siguiente && (!fin || fin >= siguiente.inicio)) throw new Error(`Se solapa con «${siguiente.nombre}», que empieza el ${fechaCorta(siguiente.inicio)}`);
+      if (inicio !== p.inicio && previa && (!previa.fin || inicio <= previa.fin)) throw new Error(`Se solapa con «${previa.nombre}», que termina el ${previa.fin ? fechaCorta(previa.fin) : '—'}`);
+      Object.assign(p, { nombre, inicio, fin }); save(db); return true;
     },
     renamePlan({ key, id, nombre }) {
       admin(key); if (!String(nombre || '').trim()) throw new Error('Falta el nombre');

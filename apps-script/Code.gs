@@ -16,7 +16,8 @@
  *                (variante vacía = ejercicio base; 1, 2… = variante)
  *   Usuarios     codigo | nombre | activo
  *   Planes       id | codigo | nombre | inicio | fin
- *                (una planificación por bloque; fin vacío = la vigente. Solo hay una vigente por usuario.)
+ *                (una planificación por bloque, de inicio a fin; fin vacío = sin fecha de fin.
+ *                 La que ve el usuario es la que está en curso hoy; si se solapan, la que empezó más tarde.)
  *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | x2 | orden | activo | planId
  *                (ejercicioId puede ser un base, 4E, o una variante, 4E1.
  *                 x2 = TRUE: una repetición cuenta al hacerla con ambos lados, o ida y vuelta.
@@ -194,7 +195,8 @@ var ACTIONS = {
   addAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return addAssignment_(r); }); },
   updateAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateAssignment_(r); }); },
   removeAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Asignaciones', 'id', r.id, { activo: false }); }); },
-  newPlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return newPlan_(r.codigo, r.nombre, r.copiar); }); },
+  newPlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return newPlan_(r.codigo, r.nombre, r.copiar, r.inicio, r.fin); }); },
+  updatePlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return updatePlan_(r.id, r.nombre, r.inicio, r.fin); }); },
   renamePlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return renamePlan_(r.id, r.nombre); }); },
   adminHistory: function (r) { requireAdmin_(r.key); return getHistory_(r.codigo); }
 };
@@ -300,7 +302,7 @@ function getPlan_(codigo) {
     }
   });
 
-  var plan = currentPlan_(codigo, false);
+  var plan = planEnCurso_(codigo, hoy);
   var ejercicios = [];
   readTable_('Asignaciones').forEach(function (a) {
     if (!plan || a.planId !== plan.id || !isActive_(a.activo)) return;
@@ -319,7 +321,9 @@ function getPlan_(codigo) {
   return {
     nombre: user.nombre,
     fecha: hoy,
-    plan: plan ? { id: plan.id, nombre: plan.nombre, inicio: plan.inicio } : null,
+    plan: plan ? { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, fin: plan.fin } : null,
+    // La siguiente que empezará más adelante, para avisar al usuario.
+    proxima: proximaPlan_(codigo, hoy),
     categorias: readTable_('Categorias').map(function (c) { return { id: Number(c.id), nombre: c.nombre }; }),
     ejercicios: ejercicios
   };
@@ -378,7 +382,7 @@ function adminData_() {
     usuarios: readTable_('Usuarios').filter(function (u) { return isActive_(u.activo); }).map(function (u) {
       return { codigo: u.codigo, nombre: u.nombre };
     }),
-    // Solo las de la planificación vigente: las de planificaciones cerradas son histórico.
+    // Solo las de planificaciones no terminadas: las terminadas son histórico.
     asignaciones: readTable_('Asignaciones').filter(function (a) { return isActive_(a.activo) && vigentes[a.planId]; }).map(function (a) {
       return {
         id: a.id, codigo: a.codigo, planId: a.planId, ejercicioId: normId_(a.ejercicioId), cantidad: Number(a.cantidad),
@@ -455,37 +459,78 @@ function readPlanes_() {
   });
 }
 
+// Planificaciones que no han terminado (en curso o por empezar).
 function vigentPlanIds_() {
-  var o = {};
-  readPlanes_().forEach(function (p) { if (!p.fin) o[p.id] = true; });
+  var o = {}, hoy = today_();
+  readPlanes_().forEach(function (p) { if (!terminada_(p, hoy)) o[p.id] = true; });
   return o;
 }
 
-// La planificación vigente de un usuario; con crear=true, se crea si no tiene ninguna.
-function currentPlan_(codigo, crear) {
+function terminada_(p, dia) { return !!p.fin && p.fin < dia; }
+function enCurso_(p, dia) { return p.inicio <= dia && !terminada_(p, dia); }
+
+// Las planificaciones de un usuario, la más reciente primero (a igual inicio, la creada después).
+function planesDe_(codigo) {
   codigo = normCode_(codigo);
-  var vig = readPlanes_().filter(function (p) { return p.codigo === codigo && !p.fin; });
-  vig.sort(function (a, b) { return a.inicio < b.inicio ? 1 : -1; });
-  if (vig[0]) return vig[0];
-  return crear ? createPlan_(codigo, 'Planificación ' + fechaCorta_(today_()), today_()) : null;
+  return readPlanes_().map(function (p, i) { p.n = i; return p; })
+    .filter(function (p) { return p.codigo === codigo; })
+    .sort(function (a, b) { return a.inicio < b.inicio ? 1 : a.inicio > b.inicio ? -1 : b.n - a.n; });
 }
 
-function createPlan_(codigo, nombre, inicio) {
+// La que ve el usuario ese día.
+function planEnCurso_(codigo, dia) {
+  return planesDe_(codigo).filter(function (p) { return enCurso_(p, dia); })[0] || null;
+}
+
+function proximaPlan_(codigo, dia) {
+  var futuras = planesDe_(codigo).filter(function (p) { return p.inicio > dia; });
+  var p = futuras[futuras.length - 1];
+  return p ? { nombre: p.nombre, inicio: p.inicio, fin: p.fin } : null;
+}
+
+// La planificación que edita el administrador: la más reciente que no ha terminado
+// (puede empezar más adelante). Con crear=true, si no hay ninguna se crea desde hoy, sin fecha de fin.
+function currentPlan_(codigo, crear) {
+  var hoy = today_();
+  var p = planesDe_(codigo).filter(function (x) { return !terminada_(x, hoy); })[0];
+  if (p) return p;
+  return crear ? createPlan_(codigo, 'Planificación ' + fechaCorta_(hoy), hoy, '') : null;
+}
+
+function createPlan_(codigo, nombre, inicio, fin) {
   var p = { id: 'P' + Date.now().toString(36).toUpperCase() + randomCode_(3), codigo: normCode_(codigo),
-    nombre: String(nombre || '').trim() || 'Planificación ' + fechaCorta_(inicio), inicio: inicio, fin: '' };
+    nombre: String(nombre || '').trim() || 'Planificación ' + fechaCorta_(inicio), inicio: inicio, fin: fin || '' };
   appendObj_('Planes', p);
   return p;
 }
 
-// Cierra la planificación vigente (fin = hoy) y abre una nueva desde hoy.
+// Fechas de una planificación: inicio obligatorio, fin vacío = sin fecha de fin.
+function checkFechas_(inicio, fin) {
+  if (!isIsoDate_(inicio)) throw new Error('Fecha de inicio no válida');
+  if (fin && !isIsoDate_(fin)) throw new Error('Fecha de fin no válida');
+  if (fin && fin < inicio) throw new Error('La fecha de fin no puede ser anterior a la de inicio');
+}
+
+// Abre una planificación nueva de inicio a fin (por defecto desde hoy y sin fecha de fin).
+// Si la actual sigue abierta en esa fecha, termina el día antes del inicio de la nueva.
 // copiar=true: la nueva empieza con los mismos ejercicios, para retocar solo lo que cambie.
-function newPlan_(codigo, nombre, copiar) {
+function newPlan_(codigo, nombre, copiar, inicio, fin) {
   codigo = normCode_(codigo);
   if (!readTable_('Usuarios').some(function (u) { return normCode_(u.codigo) === codigo; })) throw new Error('Usuario no encontrado');
   var hoy = today_();
+  inicio = String(inicio || hoy).trim();
+  fin = String(fin || '').trim();
+  checkFechas_(inicio, fin);
+  if (inicio < hoy) throw new Error('La fecha de inicio no puede ser anterior a hoy');
   var anterior = currentPlan_(codigo, false);
-  if (anterior) updateRow_('Planes', 'id', anterior.id, { fin: hoy });
-  var plan = createPlan_(codigo, nombre, hoy);
+  if (anterior && inicio < anterior.inicio) {
+    throw new Error('No puede empezar antes que «' + anterior.nombre + '» (' + fechaCorta_(anterior.inicio) + ')');
+  }
+  if (anterior && (!anterior.fin || anterior.fin >= inicio)) {
+    var finAnterior = addDays_(inicio, -1);
+    updateRow_('Planes', 'id', anterior.id, { fin: finAnterior < anterior.inicio ? anterior.inicio : finAnterior });
+  }
+  var plan = createPlan_(codigo, nombre, inicio, fin);
   var copiados = 0;
   if (anterior && copiar) {
     readTable_('Asignaciones').forEach(function (a) {
@@ -496,7 +541,32 @@ function newPlan_(codigo, nombre, copiar) {
       copiados++;
     });
   }
-  return { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, copiados: copiados };
+  return { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, fin: plan.fin, copiados: copiados };
+}
+
+// Cambia nombre y fechas. Las terminadas son histórico: no se tocan.
+// No puede solaparse con la anterior ni con la siguiente del mismo usuario.
+function updatePlan_(id, nombre, inicio, fin) {
+  var p = readPlanes_().filter(function (x) { return x.id === id; })[0];
+  if (!p) throw new Error('No encontrado: ' + id);
+  var hoy = today_();
+  if (terminada_(p, hoy)) throw new Error('Esta planificación ya terminó: es de solo lectura');
+  nombre = nombre == null ? p.nombre : String(nombre).trim();
+  if (!nombre) throw new Error('Falta el nombre');
+  inicio = inicio == null ? p.inicio : String(inicio).trim();
+  fin = fin == null ? p.fin : String(fin).trim();
+  checkFechas_(inicio, fin);
+  if (fin && fin < hoy) throw new Error('La fecha de fin no puede ser anterior a hoy');
+  var lista = planesDe_(p.codigo), i = lista.map(function (x) { return x.id; }).indexOf(id);
+  var siguiente = lista[i - 1], previa = lista[i + 1];
+  if (siguiente && (!fin || fin >= siguiente.inicio)) {
+    throw new Error('Se solapa con «' + siguiente.nombre + '», que empieza el ' + fechaCorta_(siguiente.inicio));
+  }
+  // Si el inicio no cambia, se respeta tal cual (datos antiguos: fin de la previa = inicio de esta).
+  if (inicio !== p.inicio && previa && (!previa.fin || inicio <= previa.fin)) {
+    throw new Error('Se solapa con «' + previa.nombre + '», que termina el ' + (previa.fin ? fechaCorta_(previa.fin) : '—'));
+  }
+  return updateRow_('Planes', 'id', id, { nombre: nombre, inicio: inicio, fin: fin });
 }
 
 function renamePlan_(id, nombre) {
@@ -642,6 +712,12 @@ function normCode_(c) { return String(c || '').trim().toUpperCase(); }
 function normId_(c) { return String(c || '').trim().normalize('NFC').toUpperCase(); }
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function fechaCorta_(iso) { var p = String(iso).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+function isIsoDate_(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s)) && !isNaN(Date.parse(s + 'T00:00:00Z')); }
+// Suma días a una fecha yyyy-MM-dd (sin depender de la zona horaria).
+function addDays_(iso, n) {
+  var p = String(iso).split('-');
+  return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)).toISOString().slice(0, 10);
+}
 function fmtDate_(v) { return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v); }
 
 function randomCode_(n) {
