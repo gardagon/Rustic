@@ -48,7 +48,8 @@ Decisiones tomadas:
   que está en curso hoy (inicio ≤ hoy ≤ fin); si se solapan, la de inicio más reciente y, a igual inicio, la creada
   después (así se leen bien los datos antiguos, donde fin de la anterior = inicio de la nueva). Pasado el fin, el
   usuario no ve ejercicios hasta que haya otra; si hay una futura, se le avisa de cuándo empieza.
-  "Nueva planificación" pide inicio (≥ hoy y ≥ inicio de la actual) y fin o "sin fin"; si la actual sigue abierta
+  "Nueva planificación" pide inicio (≥ hoy y ≥ inicio de la actual) y fin (por defecto, el mismo día que el inicio)
+  o "sin fin"; si la actual sigue abierta
   en esa fecha, termina el día antes. Opcionalmente copia sus ejercicios.
   El administrador edita la más reciente que no ha terminado (puede ser una que empieza más adelante); su nombre y
   fechas se cambian en #/admin/p/ID, sin solaparse con la anterior ni la siguiente y con fin ≥ hoy.

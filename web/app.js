@@ -31,7 +31,7 @@
   };
   const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
   // "del 5 oct al 30 nov" · "desde 5 oct, sin fecha de fin"
-  const rango = p => (p.fin ? `del ${fechaMedia(p.inicio)} al ${fechaMedia(p.fin)}` : `desde ${fechaMedia(p.inicio)}, sin fecha de fin`);
+  const rango = p => (p.fin === p.inicio ? `solo el ${fechaMedia(p.inicio)}` : p.fin ? `del ${fechaMedia(p.inicio)} al ${fechaMedia(p.fin)}` : `desde ${fechaMedia(p.inicio)}, sin fecha de fin`);
   // Planificaciones: de inicio a fin (fin vacío = sin fecha de fin). La que edita el administrador
   // es la más reciente que no ha terminado (puede empezar más adelante). Igual que currentPlan_ en Code.gs.
   const planEditable = (planes, codigo) => {
@@ -50,12 +50,12 @@
     const pi = document.getElementById('pi'), pf = document.getElementById('pf'), sf = document.getElementById('psf');
     const sync = () => {
       pf.disabled = sf.checked; pf.required = !sf.checked; pf.min = pi.value;
-      if (!sf.checked && !pf.value) pf.value = defaultFin(pi.value);
+      // Por defecto, el mismo día del inicio; nunca antes.
+      if (!sf.checked && (!pf.value || pf.value < pi.value)) pf.value = defaultFin(pi.value);
     };
     sf.onchange = sync; pi.onchange = sync;
     return () => ({ inicio: pi.value, fin: sf.checked ? '' : pf.value });
   }
-  const masDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
   const fechaLarga = iso => {
     const t = new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
     return t.charAt(0).toUpperCase() + t.slice(1);
@@ -588,7 +588,7 @@
       </header>
       <form id="f" class="card stack">
         <div><label for="pn">Nombre (opcional)</label><input id="pn" placeholder="Planificación ${esc(hoy)}"></div>
-        ${fechasFields(minInicio, masDias(minInicio, 27), minInicio)}
+        ${fechasFields(minInicio, minInicio, minInicio)}
         ${n ? `<label class="check"><input type="checkbox" id="cp" checked>
           <span>Empezar con los ${n} ejercicios de la actual, para cambiar solo lo necesario</span></label>` : ''}
         <p class="muted small">${actual ? `Si «${esc(actual.nombre)}» sigue abierta en esa fecha, termina el día antes y pasa al histórico tal como está. ` : ''}${n ? '' : 'Empezará vacía. '}
@@ -596,7 +596,7 @@
         <button class="btn-block">Crear planificación</button>
       </form>`;
     document.getElementById('back').onclick = () => go(backTo);
-    const fechas = wireFechas(ini => masDias(ini, 27)); // propuesta: 4 semanas
+    const fechas = wireFechas(ini => ini); // por defecto, un solo día
     document.getElementById('f').onsubmit = async ev => {
       ev.preventDefault();
       const cp = document.getElementById('cp');
@@ -627,7 +627,7 @@
         <button class="btn-block">Guardar</button>
       </form>`;
     document.getElementById('back').onclick = () => go(backTo);
-    const fechas = wireFechas(ini => { const f = masDias(ini, 27); return f < hoyISO() ? hoyISO() : f; });
+    const fechas = wireFechas(ini => (ini < hoyISO() ? hoyISO() : ini)); // el fin no puede ser anterior a hoy
     document.getElementById('f').onsubmit = async ev => {
       ev.preventDefault();
       try {
