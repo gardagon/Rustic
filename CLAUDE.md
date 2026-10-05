@@ -66,6 +66,9 @@ Decisiones tomadas:
   versión y la pone en la implementación (misma URL). Datos en `apps-script/deploy.json`; lógica en
   `.github/scripts/google.mjs`. La credencial de Google está cifrada en `.github/google-token.enc` y la clave es el
   secreto `GOOGLE_AUTH` del repositorio. Si ese flujo falla, el resultado está en la pestaña Actions de GitHub.
+- Para comprobar desde una sesión si un push publicó bien (la API de /actions está bloqueada, esta no):
+  `gh api repos/gardagon/Rustic/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name) \(.conclusion)"'`
+  El job `publicar` / `conectar` solo acaba en success si la app web publicada respondió bien.
 - Si un cambio de Code.gs altera el esquema de la hoja, sube `SCHEMA_VERSION`: se migra sola al publicar.
 - Sin dependencias ni paso de build. Mantenerlo así salvo que haya un motivo claro.
 - Probar en local: `cd web && python3 -m http.server 8000`.
