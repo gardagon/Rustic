@@ -74,3 +74,13 @@ const p4=call('newPlan',{key,codigo:u,nombre:'Rehecha',inicio:'2026-11-20'}).dat
 assert(planesU().find(p=>p.id===p3.id).fin==='2026-11-20' && call('getPlan',{codigo:u}).data.plan.id===p4.id,'misma fecha de inicio: gana la creada después');
 assert(!call('updatePlan',{key:'mal',id:p4.id,nombre:'x'}).ok,'editar sin clave rechazado');
 assert(call('renamePlan',{key,id:p4.id,nombre:'Renombrada'}).ok && call('getPlan',{codigo:u}).data.plan.nombre==='Renombrada','renamePlan sigue funcionando');
+// copiar de una planificación terminada (o de cualquiera), con fechas de hoy a hoy
+NOW='2026-12-10';
+const viejos=call('getHistory',{codigo:u}).data.find(p=>p.id===p3.id).ejercicios.length;
+const p5=call('newPlan',{key,codigo:u,nombre:'Copia de Bloque 2',inicio:'2026-12-10',fin:'2026-12-10',copiar:true,desdeId:p3.id}).data;
+assert(planesU().find(p=>p.id===p3.id).fin==='2026-11-20','la terminada de origen no se toca');
+assert(p5.copiados===viejos && viejos>0 && p5.inicio==='2026-12-10' && p5.fin==='2026-12-10','copia los ejercicios de una terminada, de hoy a hoy');
+assert(call('getPlan',{codigo:u}).data.ejercicios.length===viejos,'el usuario ve los copiados');
+assert(!call('newPlan',{key,codigo:u,inicio:'2026-12-10',fin:'2026-12-10',copiar:true,desdeId:'PNOEXISTE'}).ok,'origen inexistente rechazado');
+const otro=call('addUser',{key,nombre:'Otro'}).data.codigo;
+assert(!call('newPlan',{key,codigo:otro,inicio:'2026-12-10',copiar:true,desdeId:p3.id}).ok,'no se copia de la planificación de otro usuario');

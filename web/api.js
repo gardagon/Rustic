@@ -240,12 +240,15 @@
       admin(key); const db = load(), a = db.asignaciones.find(x => x.id === id);
       if (a) a.activo = false; save(db); return true;
     },
-    newPlan({ key, codigo, nombre, copiar, inicio, fin }) {
+    newPlan({ key, codigo, nombre, copiar, inicio, fin, desdeId }) {
       admin(key); const db = load(), hoy = today();
       if (!db.usuarios.some(u => nid(u.codigo) === nid(codigo))) throw new Error('Usuario no encontrado');
       inicio = String(inicio || hoy).trim(); fin = String(fin || '').trim();
       checkFechas(inicio, fin);
       if (inicio < hoy) throw new Error('La fecha de inicio no puede ser anterior a hoy');
+      // Se copia de desdeId (también una terminada) o, si no se indica, de la más reciente.
+      const origen = (copiar || desdeId) ? (desdeId ? planesDe(db, codigo).find(p => p.id === desdeId) : planesDe(db, codigo)[0]) : null;
+      if (desdeId && !origen) throw new Error('Planificación a copiar no encontrada');
       const anterior = currentPlan(db, codigo, false);
       if (anterior && inicio < anterior.inicio) throw new Error(`No puede empezar antes que «${anterior.nombre}» (${fechaCorta(anterior.inicio)})`);
       if (anterior && (!anterior.fin || anterior.fin >= inicio)) {
@@ -254,7 +257,7 @@
       const plan = newPlanObj(codigo, nombre, inicio, fin);
       db.planes.push(plan);
       let copiados = 0;
-      if (anterior && copiar) db.asignaciones.filter(a => a.planId === anterior.id && a.activo).forEach(a => {
+      if (origen) db.asignaciones.filter(a => a.planId === origen.id && a.activo).forEach(a => {
         db.asignaciones.push({ ...a, id: 'A' + Date.now().toString(36).toUpperCase() + code(3), planId: plan.id }); copiados++;
       });
       save(db); return { id: plan.id, nombre: plan.nombre, inicio: plan.inicio, fin: plan.fin, copiados };

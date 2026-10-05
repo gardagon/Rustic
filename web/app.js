@@ -600,14 +600,19 @@
   }
 
   /* ---------- nueva planificación ---------- */
-  async function showNewPlan(codigo) {
+  // desde: planificación de la que copiar los ejercicios (también una terminada).
+  async function showNewPlan(codigo, desde) {
     if (!adminKey()) return renderAdminLogin();
     loading();
-    try { await loadAdmin(); } catch (e) { return renderAdminLogin(e.message); }
+    let hist;
+    try { await loadAdmin(); hist = await api.call('adminHistory', { key: adminKey(), codigo }); }
+    catch (e) { return renderAdminLogin(e.message); }
     const u = adminDb.usuarios.find(x => x.codigo === codigo);
     if (!u) return go('#/admin');
     const actual = planEditable(adminDb.planes, codigo);
-    const n = adminDb.asignaciones.filter(a => a.codigo === codigo && (!actual || !a.planId || a.planId === actual.id)).length;
+    // Planificaciones con ejercicios que se pueden copiar, la más reciente primero.
+    const copiables = hist.filter(p => p.ejercicios.length);
+    const elegida = copiables.find(p => p.id === desde) || copiables[0];
     const hoyIso = hoyISO();
     // No puede empezar antes de hoy ni antes que la actual.
     const minInicio = actual && actual.inicio > hoyIso ? actual.inicio : hoyIso;
@@ -621,9 +626,11 @@
       <form id="f" class="card stack">
         <div><label for="pn">Nombre (opcional)</label><input id="pn" placeholder="Planificación ${esc(hoy)}"></div>
         ${fechasFields(minInicio, minInicio, minInicio)}
-        ${n ? `<label class="check"><input type="checkbox" id="cp" checked>
-          <span>Empezar con los ${n} ejercicios de la actual, para cambiar solo lo necesario</span></label>` : ''}
-        <p class="muted small">${actual ? `Si «${esc(actual.nombre)}» sigue abierta en esa fecha, termina el día antes y pasa al histórico tal como está. ` : ''}${n ? '' : 'Empezará vacía. '}
+        ${copiables.length ? `<div><label for="cp">Copiar ejercicios de</label><select id="cp">
+          ${copiables.map(p => `<option value="${esc(p.id)}" ${p === elegida ? 'selected' : ''}>${esc(p.nombre)} · ${esc(fechaMedia(p.inicio))}${p.fin && p.fin !== p.inicio ? '–' + esc(fechaMedia(p.fin)) : ''} · ${p.ejercicios.length} ej.</option>`).join('')}
+          <option value="">No copiar: empezar vacía</option></select>
+          <p class="muted small" style="margin-top:6px">Se copian con su dosis, x<sub>2</sub> y descripción; luego cambias solo lo necesario. La original no se toca.</p></div>` : ''}
+        <p class="muted small">${actual ? `Si «${esc(actual.nombre)}» sigue abierta en esa fecha, termina el día antes y pasa al histórico tal como está. ` : ''}${copiables.length ? '' : 'Empezará vacía. '}
           ${esc(u.nombre)} verá la nueva a partir de la fecha de inicio.</p>
         <button class="btn-block">Crear planificación</button>
       </form>`;
@@ -633,7 +640,8 @@
       ev.preventDefault();
       const cp = document.getElementById('cp');
       try {
-        const p = await api.call('newPlan', { key: adminKey(), codigo, nombre: document.getElementById('pn').value, copiar: cp ? cp.checked : false, ...fechas() });
+        const desdeId = cp ? cp.value : '';
+        const p = await api.call('newPlan', { key: adminKey(), codigo, nombre: document.getElementById('pn').value, copiar: !!desdeId, desdeId, ...fechas() });
         await loadAdmin(true); toast(`Creada: ${p.nombre}`); go(backTo);
       } catch (err) { toast(err.message); }
     };
@@ -670,7 +678,8 @@
   }
 
   /* ---------- histórico (lo usan el usuario y el administrador) ---------- */
-  function renderHistory(hist, titulo, backTo) {
+  // codigoAdmin: si lo ve el administrador, cada planificación se puede copiar en una nueva.
+  function renderHistory(hist, titulo, backTo, codigoAdmin) {
     const pct = (a, b) => (b ? Math.min(100, Math.round(a / b * 100)) : 0);
     const planes = hist.map((p, i) => {
       const medias = p.dias.map(d => pct(d.hechas, p.seriesPorDia));
@@ -705,6 +714,8 @@
                   <span class="grow">${esc([e.nombre, e.varianteNombre].filter(Boolean).join(' — '))}
                     <br><span class="muted small">${dose(e)}</span></span></div>`).join('')}
             </details>
+            ${codigoAdmin && p.ejercicios.length ? `<button class="btn-ghost btn-block" style="margin-top:12px"
+              data-copiar="${esc(p.id)}">Copiar en una planificación nueva</button>` : ''}
           </div>
         </details>`;
     }).join('');
@@ -714,6 +725,8 @@
       ${planes || '<div class="card empty">Todavía no hay histórico.</div>'}
       ${hist.some(p => p.dias.some(d => d.items.some(i => i.x2))) ? `<p class="legend">${X2_HELP}</p>` : ''}`;
     document.getElementById('back').onclick = () => go(backTo);
+    $app.querySelectorAll('[data-copiar]').forEach(b => (b.onclick = () =>
+      go('#/admin/np/' + encodeURIComponent(codigoAdmin) + '?desde=' + encodeURIComponent(b.dataset.copiar))));
   }
 
   async function showHistory() {
@@ -730,7 +743,7 @@
     try {
       await loadAdmin();
       const u = adminDb.usuarios.find(x => x.codigo === codigo);
-      renderHistory(await api.call('adminHistory', { key: adminKey(), codigo }), u ? u.nombre : codigo, '#/admin/u/' + encodeURIComponent(codigo));
+      renderHistory(await api.call('adminHistory', { key: adminKey(), codigo }), u ? u.nombre : codigo, '#/admin/u/' + encodeURIComponent(codigo), codigo);
     } catch (e) { toast(e.message); go('#/admin'); }
   }
 
@@ -744,7 +757,7 @@
     if (h.startsWith('#/admin/u/')) return showAdminUser(decodeURIComponent(h.slice(10)));
     if (h.startsWith('#/admin/ej/')) return showEditExercise(decodeURIComponent(h.slice(11)));
     if (h.startsWith('#/admin/a/')) return showEditAssignment(decodeURIComponent(h.slice(10)));
-    if (h.startsWith('#/admin/np/')) return showNewPlan(decodeURIComponent(h.slice(11)));
+    if (h.startsWith('#/admin/np/')) { const [c, q] = h.slice(11).split('?'); return showNewPlan(decodeURIComponent(c), new URLSearchParams(q || '').get('desde')); }
     if (h.startsWith('#/admin/p/')) return showEditPlan(decodeURIComponent(h.slice(10)));
     if (h.startsWith('#/admin/h/')) return showAdminHistory(decodeURIComponent(h.slice(10)));
     if (h === '#/historial') return showHistory();

@@ -197,7 +197,7 @@ var ACTIONS = {
   addAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return addAssignment_(r); }); },
   updateAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateAssignment_(r); }); },
   removeAssignment: function (r) { requireAdmin_(r.key); return withLock_(function () { return updateRow_('Asignaciones', 'id', r.id, { activo: false }); }); },
-  newPlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return newPlan_(r.codigo, r.nombre, r.copiar, r.inicio, r.fin); }); },
+  newPlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return newPlan_(r.codigo, r.nombre, r.copiar, r.inicio, r.fin, r.desdeId); }); },
   updatePlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return updatePlan_(r.id, r.nombre, r.inicio, r.fin); }); },
   renamePlan: function (r) { requireAdmin_(r.key); return withLock_(function () { return renamePlan_(r.id, r.nombre); }); },
   adminHistory: function (r) { requireAdmin_(r.key); return getHistory_(r.codigo); }
@@ -531,8 +531,9 @@ function checkFechas_(inicio, fin) {
 
 // Abre una planificación nueva de inicio a fin (por defecto desde hoy y sin fecha de fin).
 // Si la actual sigue abierta en esa fecha, termina el día antes del inicio de la nueva.
-// copiar=true: la nueva empieza con los mismos ejercicios, para retocar solo lo que cambie.
-function newPlan_(codigo, nombre, copiar, inicio, fin) {
+// copiar=true: la nueva empieza con los ejercicios de otra, para retocar solo lo que cambie. Se copia de desdeId
+// (cualquier planificación del usuario, también una terminada) o, si no se indica, de la más reciente.
+function newPlan_(codigo, nombre, copiar, inicio, fin, desdeId) {
   codigo = normCode_(codigo);
   if (!readTable_('Usuarios').some(function (u) { return normCode_(u.codigo) === codigo; })) throw new Error('Usuario no encontrado');
   var hoy = today_();
@@ -540,6 +541,12 @@ function newPlan_(codigo, nombre, copiar, inicio, fin) {
   fin = String(fin || '').trim();
   checkFechas_(inicio, fin);
   if (inicio < hoy) throw new Error('La fecha de inicio no puede ser anterior a hoy');
+  var origen = null;
+  if (copiar || desdeId) {
+    var suyas = planesDe_(codigo);
+    origen = desdeId ? suyas.filter(function (p) { return p.id === desdeId; })[0] : suyas[0];
+    if (desdeId && !origen) throw new Error('Planificación a copiar no encontrada');
+  }
   var anterior = currentPlan_(codigo, false);
   if (anterior && inicio < anterior.inicio) {
     throw new Error('No puede empezar antes que «' + anterior.nombre + '» (' + fechaCorta_(anterior.inicio) + ')');
@@ -550,9 +557,9 @@ function newPlan_(codigo, nombre, copiar, inicio, fin) {
   }
   var plan = createPlan_(codigo, nombre, inicio, fin);
   var copiados = 0;
-  if (anterior && copiar) {
+  if (origen) {
     readTable_('Asignaciones').forEach(function (a) {
-      if (a.planId !== anterior.id || !isActive_(a.activo)) return;
+      if (a.planId !== origen.id || !isActive_(a.activo)) return;
       appendObj_('Asignaciones', { id: newAssignmentId_(), codigo: codigo, ejercicioId: normId_(a.ejercicioId),
         cantidad: Number(a.cantidad), unidad: a.unidad, series: Number(a.series), x2: isTrue_(a.x2),
         orden: Number(a.orden) || 0, activo: true, planId: plan.id, comentario: String(a.comentario || '') });

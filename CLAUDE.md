@@ -19,7 +19,7 @@ web/            PWA estática (HTML + CSS + JS, sin build). Se publica en GitHub
   api.js        Capa de datos. Implementa las mismas acciones en remoto y en demo: si añades una acción, añádela en los dos sitios.
   app.js        Interfaz. Rutas por hash: #/ , #/plan , #/admin , #/admin/ejercicios , #/admin/u/CODIGO ,
                 #/admin/ej/ID (editar ejercicio o variante) , #/admin/a/ID (editar asignación) ,
-                #/admin/np/CODIGO (nueva planificación) , #/admin/p/ID (nombre y fechas de la planificación) ,
+                #/admin/np/CODIGO[?desde=ID] (nueva planificación) , #/admin/p/ID (nombre y fechas de la planificación) ,
                 #/admin/h/CODIGO (histórico)
   sw.js         Service worker "red primero": los cambios se ven al recargar.
   cabecera.png  Imagen de la pantalla de entrada (150×150; si hay una versión más grande, sustituirla).
@@ -52,8 +52,11 @@ Decisiones tomadas:
   después (así se leen bien los datos antiguos, donde fin de la anterior = inicio de la nueva). Pasado el fin, el
   usuario no ve ejercicios hasta que haya otra; si hay una futura, se le avisa de cuándo empieza.
   "Nueva planificación" pide inicio (≥ hoy y ≥ inicio de la actual) y fin (por defecto, el mismo día que el inicio)
-  o "sin fin"; si la actual sigue abierta
-  en esa fecha, termina el día antes. Opcionalmente copia sus ejercicios.
+  o "sin fin"; si la actual sigue abierta en esa fecha, termina el día antes.
+  Copiar: la nueva puede empezar con los ejercicios (dosis, x2, descripción) de cualquier planificación del usuario,
+  también de una terminada (selector "Copiar ejercicios de", por defecto la más reciente; `newPlan` con `desdeId`).
+  Desde el histórico del administrador, "Copiar en una planificación nueva" abre #/admin/np/CODIGO?desde=ID.
+  La original no se modifica.
   El administrador edita la más reciente que no ha terminado (puede ser una que empieza más adelante); su nombre y
   fechas se cambian en #/admin/p/ID, sin solaparse con la anterior ni la siguiente y con fin ≥ hoy.
   Las terminadas (fin < hoy) son de solo lectura (histórico). Un ejercicio puede repetirse en planificaciones distintas.
