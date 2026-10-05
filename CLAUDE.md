@@ -70,6 +70,8 @@ Decisiones tomadas:
 4. Después del push, comprueba que se publicó (ver más abajo) y dime en 2–3 pasos cómo probarlo en el móvil.
 5. Las pruebas en navegador (Playwright) se hacen con `API_URL` vacía en `web/config.js` (modo demo), y se restaura
    después. Nunca subas `config.js` con la URL vacía.
+6. Este archivo es la memoria del proyecto: si cambias la arquitectura, el modelo de datos o se toma una decisión
+   nueva, actualízalo en el mismo push. Lo que no esté aquí, la siguiente sesión no lo sabrá.
 
 - Cambios en `web/` → commit y push a `main` → GitHub Pages publica en ~1 minuto → recargar en el móvil.
 - Cambios en `apps-script/Code.gs` → push a `main` → el flujo "Publicar backend" lo sube a Apps Script, crea una
