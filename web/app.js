@@ -96,7 +96,7 @@
   function renderLogin(error = '') {
     $app.innerHTML = `
       <section class="login">
-        <div class="brand"><img src="icon.svg" alt=""><h1>Rustic</h1></div>
+        <div class="brand"><img src="cabecera.png" alt="Rustic Training Club" width="150" height="150"></div>
         <form id="f" class="stack" autocomplete="off">
           <div>
             <label for="code">Tu código</label>

@@ -90,9 +90,8 @@ button:disabled { opacity: .5; cursor: default; }
 
 /* ---------- Pantalla de entrada ---------- */
 .login { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; }
-.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
-.brand img { width: 52px; height: 52px; border-radius: 12px; }
-.brand h1 { font-size: 36px; }
+.brand { display: flex; justify-content: center; margin-bottom: 28px; }
+.brand img { width: 150px; height: 150px; border-radius: 16px; box-shadow: var(--shadow); }
 
 /* ---------- Cabecera del plan ---------- */
 .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; }

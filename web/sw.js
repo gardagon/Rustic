@@ -1,7 +1,7 @@
 // Service worker: "red primero" para los archivos de la app, así cada despliegue
 // se ve al recargar; la caché solo se usa sin conexión. Los datos (POST) no se cachean.
-const CACHE = 'rustic-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'api.js', 'config.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'rustic-v2';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'api.js', 'config.js', 'icon-64.png', 'cabecera.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

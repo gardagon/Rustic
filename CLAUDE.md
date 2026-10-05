@@ -22,6 +22,9 @@ web/            PWA estática (HTML + CSS + JS, sin build). Se publica en GitHub
                 #/admin/np/CODIGO (nueva planificación) , #/admin/p/ID (nombre y fechas de la planificación) ,
                 #/admin/h/CODIGO (histórico)
   sw.js         Service worker "red primero": los cambios se ven al recargar.
+  cabecera.png  Imagen de la pantalla de entrada (150×150; si hay una versión más grande, sustituirla).
+  icon-*.png    Logo "R" sobre fondo terracota (#B4532A): 64 favicon, 180 iPhone, 192/512 Android.
+                Al cambiar archivos de la app que se precargan, sube CACHE en sw.js.
 apps-script/
   Code.gs       Backend en Google Apps Script vinculado a la Google Sheet (la base de datos).
 .github/workflows/deploy.yml   Publica web/ en GitHub Pages en cada push a main.
