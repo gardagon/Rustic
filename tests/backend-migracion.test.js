@@ -37,7 +37,7 @@ mk('Registro',[['fecha','codigo','asignacionId','ejercicioId','serie','timestamp
   ['2026-10-02','ANA222','A1','4E1',1,''],['2026-10-02','ANA222','A1','4E1',2,''],['2026-10-03','ANA222','A2','1A',1,'']]);
 
 // ---- Antes de migrar, la app no debe romperse del todo ----
-call("getPlan",{codigo:"ANA222"}); assert(props.SCHEMA_VERSION==="2","la primera petición migra sola y guarda la versión"); call("getPlan",{codigo:"ANA222"});
+call("getPlan",{codigo:"ANA222"}); assert(props.SCHEMA_VERSION==="3","la primera petición migra sola y guarda la versión"); call("getPlan",{codigo:"ANA222"});
 assert(sheets.Catalogo.d.length===cat.length,'setup no duplica el catálogo existente');
 assert(sheets.Asignaciones.d[0].includes('planId') && sheets.Registro.d[0].includes('x2'),'columnas nuevas añadidas al final');
 assert(sheets.Asignaciones.d.length===4 && sheets.Registro.d.length===4,'no se pierde ninguna fila');

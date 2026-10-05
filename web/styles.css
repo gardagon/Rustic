@@ -186,3 +186,15 @@ button:disabled { opacity: .5; cursor: default; }
 .hist-item > .grow { flex: 1; min-width: 0; }
 .hist-item .ok { color: var(--done); font-weight: 700; }
 .hist-day > summary .grow { flex: 1; }
+
+/* Descripción que escribe el usuario en cada ejercicio */
+.note { display: flex; gap: 10px; align-items: flex-start; width: 100%; margin-top: 12px; padding: 10px 12px; min-height: 0;
+  background: var(--bg); color: var(--ink); border: 1px dashed var(--line); border-radius: 10px; text-align: left; font-weight: 400; font-size: 14px; white-space: pre-wrap; }
+.note .grow { flex: 1; }
+.note-add { margin-top: 8px; padding: 0; min-height: 36px; font-size: 14px; }
+.note-form { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.note-form label { margin: 0; }
+textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; resize: vertical; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.note-text { white-space: pre-wrap; margin: 6px 0 0; }

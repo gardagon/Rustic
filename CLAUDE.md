@@ -38,7 +38,7 @@ apps-script/
 | Catalogo | id, categoria, letra, variante, nombre, video, activo |
 | Usuarios | codigo, nombre, activo |
 | Planes | id, codigo, nombre, inicio, fin (vacío = sin fecha de fin) |
-| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, x2, orden, activo, planId |
+| Asignaciones | id, codigo, ejercicioId, cantidad, unidad (reps/seg/min), series, x2, orden, activo, planId, comentario |
 | Registro | fecha (yyyy-MM-dd, Europe/Madrid), codigo, asignacionId, ejercicioId, serie, timestamp, planId, cantidad, unidad, series, x2 |
 
 Las columnas se localizan por su cabecera (`appendObj_`, `readTable_`), no por su posición. `setup()` es idempotente:
@@ -66,6 +66,11 @@ Decisiones tomadas:
 - Los números de variante eliminada no se reutilizan, para que el histórico no se mezcle.
 - `x2` (se muestra como x₂ junto a la cantidad): la repetición cuenta al hacerla con los dos lados (curl con ambos brazos) o ida y vuelta (empujes en pista). Es de la asignación, no del ejercicio: el entrenador lo decide en cada plan.
 - Un mismo ID no puede estar dos veces en la misma planificación (se edita, no se duplica). Variantes distintas del mismo ejercicio (4E1 y 4E2) sí pueden convivir.
+- `comentario` de la asignación = "Descripción" que escribe el propio usuario (acción `setComment`, con su código),
+  para ejercicios que aún no tienen nombre o explicación. Al asignar viene vacía; el entrenador solo la lee (📝 en la
+  lista y en la ficha de la asignación) y no puede editarla. Se copia al crear una planificación copiando ejercicios.
+  En planificaciones terminadas es de solo lectura. Máx. 1000 caracteres; si empieza por = + - @ se guarda con
+  apóstrofo delante para que Sheets no la tome como fórmula.
 - Códigos de usuario aleatorios de 6 caracteres sin 0/O/1/I.
 - Borrado lógico (`activo = FALSE`), nunca se borran filas salvo en Registro al desmarcar una serie.
 - Los ejercicios base no se eliminan (son fijos, A–Z). Una variante no se puede eliminar mientras esté asignada.

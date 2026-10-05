@@ -147,7 +147,7 @@
         ejercicios: !plan ? [] : db.asignaciones.filter(a => a.planId === plan.id && a.activo).map(a => {
           const d = describe(a.ejercicioId, db);
           if (!d) return null;
-          return { ...d, asignacionId: a.id, cantidad: a.cantidad, unidad: a.unidad, series: a.series, x2: !!a.x2,
+          return { ...d, asignacionId: a.id, cantidad: a.cantidad, unidad: a.unidad, series: a.series, x2: !!a.x2, comentario: a.comentario || '',
             hechas: db.registro.filter(r => r.asignacionId === a.id && r.fecha === hoy).map(r => r.serie) };
         }).filter(Boolean).sort(sortEj)
       };
@@ -164,6 +164,16 @@
       const db = load(), hoy = today();
       db.registro = db.registro.filter(r => !(r.asignacionId === asignacionId && r.fecha === hoy && r.serie === serie));
       save(db); return true;
+    },
+    // La descripción la escribe el usuario; el administrador solo la lee.
+    setComment({ codigo, asignacionId, comentario }) {
+      const db = load(), a = db.asignaciones.find(x => x.id === asignacionId);
+      if (!a || !a.activo || nid(a.codigo) !== nid(codigo)) throw new Error('Asignación no encontrada');
+      const p = db.planes.find(x => x.id === a.planId);
+      if (p && terminada(p, today())) throw new Error('Esa planificación ya terminó: es de solo lectura');
+      comentario = String(comentario || '').trim();
+      if (comentario.length > 1000) throw new Error('Máximo 1000 caracteres');
+      a.comentario = comentario; save(db); return { comentario };
     },
     getHistory({ codigo }) {
       const db = load();

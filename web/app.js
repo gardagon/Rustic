@@ -66,6 +66,7 @@
   let adminDb = null;
   let adminCat = 1; // categoría elegida en la pestaña Ejercicios
   const openCats = new Set();
+  let editNote = null; // asignación cuya descripción se está editando
 
   /* ---------- catálogo (admin) ---------- */
   const LETRAS = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
@@ -142,7 +143,7 @@
     renderPlan();
     try {
       const fresco = fixPlan(await api.call('getPlan', { codigo }));
-      if (location.hash === '#/plan' && JSON.stringify(fresco) !== JSON.stringify(plan)) { plan = fresco; renderPlan(); }
+      if (location.hash === '#/plan' && !editNote && JSON.stringify(fresco) !== JSON.stringify(plan)) { plan = fresco; renderPlan(); }
     } catch {}
   }
 
@@ -189,6 +190,12 @@
       d.open ? openCats.add(+d.dataset.cat) : openCats.delete(+d.dataset.cat);
     }));
     $app.querySelectorAll('.set').forEach(b => (b.onclick = () => toggleSet(b.dataset.a, +b.dataset.s)));
+    $app.querySelectorAll('[data-note]').forEach(b => (b.onclick = () => { editNote = b.dataset.note; renderPlan(); document.getElementById('nt').focus(); }));
+    const nf = $app.querySelector('.note-form');
+    if (nf) {
+      nf.onsubmit = ev => { ev.preventDefault(); saveNote(nf.dataset.a, document.getElementById('nt').value); };
+      nf.querySelector('[data-note-cancel]').onclick = () => { editNote = null; renderPlan(); };
+    }
   }
 
   function renderExercise(e) {
@@ -208,7 +215,30 @@
           ${e.video ? `<a class="btn video-btn" href="${esc(e.video)}" target="_blank" rel="noopener">▶ Vídeo</a>` : ''}
         </div>
         <div class="sets">${sets}</div>
+        ${renderNote(e)}
       </div>`;
+  }
+
+  // Descripción del ejercicio: la escribe quien lo hace (el entrenador solo la lee).
+  function renderNote(e) {
+    if (!('comentario' in e)) return ''; // backend anterior
+    if (editNote === e.asignacionId) return `
+      <form class="note-form" data-a="${esc(e.asignacionId)}">
+        <label for="nt">Descripción</label>
+        <textarea id="nt" rows="3" maxlength="1000" placeholder="Cómo se hace, para recordarlo">${esc(e.comentario)}</textarea>
+        <div class="grid-2"><button type="button" class="btn-ghost" data-note-cancel>Cancelar</button><button>Guardar</button></div>
+      </form>`;
+    return e.comentario
+      ? `<button class="note" data-note="${esc(e.asignacionId)}"><span class="grow">${esc(e.comentario)}</span><span class="edit-hint">Editar</span></button>`
+      : `<button class="btn-link note-add" data-note="${esc(e.asignacionId)}">+ Añadir descripción</button>`;
+  }
+
+  async function saveNote(asignacionId, texto) {
+    const e = plan.ejercicios.find(x => x.asignacionId === asignacionId);
+    const antes = e.comentario;
+    e.comentario = texto.trim(); editNote = null; renderPlan();
+    try { await api.call('setComment', { codigo: store.get('codigo'), asignacionId, comentario: e.comentario }); }
+    catch (err) { e.comentario = antes; renderPlan(); toast('No se pudo guardar: ' + err.message); }
   }
 
   async function toggleSet(asignacionId, serie) {
@@ -397,7 +427,7 @@
       <div class="list">${asig.map(({ a }) => `
         <button class="list-item" data-edit-a="${esc(a.id)}">
           <span class="grow"><strong>${esc(exLabel(a.ejercicioId))}</strong><br>
-            <span class="muted small">${dose(a)}</span></span>
+            <span class="muted small">${dose(a)}${a.comentario ? ' · 📝' : ''}</span></span>
           <span class="edit-hint">Editar</span></button>`).join('') || '<div class="empty">Sin ejercicios asignados.</div>'}</div>`;
 
     document.getElementById('back').onclick = () => go('#/admin');
@@ -546,6 +576,8 @@
         ${x2Field('x2', a.x2)}
         <button class="btn-block">Guardar</button>
       </form>
+      ${a.comentario ? `<div class="card" style="margin-top:12px"><p class="muted small">Descripción de ${esc(u ? u.nombre : a.codigo)} (solo la puede cambiar ${esc(u ? u.nombre : 'el usuario')})</p>
+        <p class="note-text">${esc(a.comentario)}</p></div>` : ''}
       <div class="spacer"></div>
       <button class="btn-danger btn-block" id="del">Quitar del plan</button>`;
 

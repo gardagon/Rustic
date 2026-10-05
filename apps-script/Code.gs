@@ -18,10 +18,11 @@
  *   Planes       id | codigo | nombre | inicio | fin
  *                (una planificación por bloque, de inicio a fin; fin vacío = sin fecha de fin.
  *                 La que ve el usuario es la que está en curso hoy; si se solapan, la que empezó más tarde.)
- *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | x2 | orden | activo | planId
+ *   Asignaciones id | codigo | ejercicioId | cantidad | unidad | series | x2 | orden | activo | planId | comentario
  *                (ejercicioId puede ser un base, 4E, o una variante, 4E1.
  *                 x2 = TRUE: una repetición cuenta al hacerla con ambos lados, o ida y vuelta.
- *                 Un mismo ejercicioId no puede repetirse dentro de una planificación.)
+ *                 Un mismo ejercicioId no puede repetirse dentro de una planificación.
+ *                 comentario = descripción que escribe el propio usuario; el administrador solo la lee.)
  *   Registro     fecha | codigo | asignacionId | ejercicioId | serie | timestamp | planId | cantidad | unidad | series | x2
  *                (cada serie hecha guarda también lo que estaba prescrito ese día, para que el histórico
  *                 no cambie aunque luego se edite la planificación)
@@ -32,7 +33,7 @@
  */
 
 // Súbelo cuando cambie el esquema de la hoja: la primera petición tras publicar ejecuta setup() sola.
-var SCHEMA_VERSION = 2;
+var SCHEMA_VERSION = 3;
 
 var NUM_CATEGORIAS = 9;
 // Alfabeto español: la Ñ va entre la N y la O. El orden de la app sale de aquí.
@@ -45,7 +46,7 @@ var HEADERS = {
   Catalogo: ['id', 'categoria', 'letra', 'variante', 'nombre', 'video', 'activo'],
   Usuarios: ['codigo', 'nombre', 'activo'],
   Planes: ['id', 'codigo', 'nombre', 'inicio', 'fin'],
-  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'x2', 'orden', 'activo', 'planId'],
+  Asignaciones: ['id', 'codigo', 'ejercicioId', 'cantidad', 'unidad', 'series', 'x2', 'orden', 'activo', 'planId', 'comentario'],
   Registro: ['fecha', 'codigo', 'asignacionId', 'ejercicioId', 'serie', 'timestamp', 'planId', 'cantidad', 'unidad', 'series', 'x2']
 };
 
@@ -77,7 +78,7 @@ function setup() {
   textColumns_('Catalogo', ['id', 'categoria', 'letra', 'variante']);
   textColumns_('Usuarios', ['codigo']);
   textColumns_('Planes', ['id', 'codigo', 'inicio', 'fin']);
-  textColumns_('Asignaciones', ['id', 'codigo', 'ejercicioId', 'planId']);
+  textColumns_('Asignaciones', ['id', 'codigo', 'ejercicioId', 'planId', 'comentario']);
   textColumns_('Registro', ['fecha', 'codigo', 'asignacionId', 'ejercicioId', 'planId']);
 
   var cat = ss.getSheetByName('Categorias');
@@ -182,6 +183,7 @@ var ACTIONS = {
   getPlan: function (r) { return getPlan_(r.codigo); },
   logSet: function (r) { return withLock_(function () { return logSet_(r.codigo, r.asignacionId, r.serie); }); },
   unlogSet: function (r) { return withLock_(function () { return unlogSet_(r.codigo, r.asignacionId, r.serie); }); },
+  setComment: function (r) { return withLock_(function () { return setComment_(r.codigo, r.asignacionId, r.comentario); }); },
   getHistory: function (r) { requireUser_(r.codigo); return getHistory_(r.codigo); },
 
   // --- Administrador (todas exigen r.key) ---
@@ -313,6 +315,7 @@ function getPlan_(codigo) {
     d.unidad = a.unidad;
     d.series = Number(a.series);
     d.x2 = isTrue_(a.x2);
+    d.comentario = String(a.comentario || '');
     d.hechas = hechas[a.id] || [];
     ejercicios.push(d);
   });
@@ -363,6 +366,20 @@ function unlogSet_(codigo, asignacionId, serie) {
   return true;
 }
 
+// La descripción del ejercicio la escribe el usuario (no el administrador). Solo en planificaciones no terminadas.
+var MAX_COMENTARIO = 1000;
+function setComment_(codigo, asignacionId, comentario) {
+  var a = findAssignmentFor_(codigo, asignacionId);
+  if (!isActive_(a.activo)) throw new Error('Asignación no encontrada');
+  var p = readPlanes_().filter(function (x) { return x.id === a.planId; })[0];
+  if (p && terminada_(p, today_())) throw new Error('Esa planificación ya terminó: es de solo lectura');
+  comentario = String(comentario || '').trim();
+  if (comentario.length > MAX_COMENTARIO) throw new Error('Máximo ' + MAX_COMENTARIO + ' caracteres');
+  // Texto escrito por el usuario: el apóstrofo evita que Sheets lo tome como fórmula (=, +, -, @).
+  updateRow_('Asignaciones', 'id', asignacionId, { comentario: /^[=+\-@]/.test(comentario) ? "'" + comentario : comentario });
+  return { comentario: comentario };
+}
+
 function findAssignmentFor_(codigo, asignacionId) {
   var a = readTable_('Asignaciones').filter(function (x) { return x.id === asignacionId; })[0];
   if (!a || normCode_(a.codigo) !== normCode_(codigo)) throw new Error('Asignación no encontrada');
@@ -386,7 +403,8 @@ function adminData_() {
     asignaciones: readTable_('Asignaciones').filter(function (a) { return isActive_(a.activo) && vigentes[a.planId]; }).map(function (a) {
       return {
         id: a.id, codigo: a.codigo, planId: a.planId, ejercicioId: normId_(a.ejercicioId), cantidad: Number(a.cantidad),
-        unidad: a.unidad, series: Number(a.series), x2: isTrue_(a.x2), orden: Number(a.orden) || 0
+        unidad: a.unidad, series: Number(a.series), x2: isTrue_(a.x2), orden: Number(a.orden) || 0,
+        comentario: String(a.comentario || '')
       };
     }),
     planes: readPlanes_()
@@ -537,7 +555,7 @@ function newPlan_(codigo, nombre, copiar, inicio, fin) {
       if (a.planId !== anterior.id || !isActive_(a.activo)) return;
       appendObj_('Asignaciones', { id: newAssignmentId_(), codigo: codigo, ejercicioId: normId_(a.ejercicioId),
         cantidad: Number(a.cantidad), unidad: a.unidad, series: Number(a.series), x2: isTrue_(a.x2),
-        orden: Number(a.orden) || 0, activo: true, planId: plan.id });
+        orden: Number(a.orden) || 0, activo: true, planId: plan.id, comentario: String(a.comentario || '') });
       copiados++;
     });
   }
