@@ -1,1 +1,2 @@
 Cambia este archivo (o ejecuta el flujo "Conectar con Google" a mano) para canjear el secreto GOOGLE_AUTH.
+Conexión lanzada: 2026-10-05T13:02:51Z
